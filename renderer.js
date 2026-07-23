@@ -20,6 +20,9 @@ const newRepoPackageModule = document.getElementById('newRepoPackageModule');
 const newRepoPackageProfile = document.getElementById('newRepoPackageProfile');
 const skipTestsChk = document.getElementById('skipTestsChk');
 const extraArgsInput = document.getElementById('extraArgsInput');
+const githubRootInput = document.getElementById('githubRootInput');
+const saveGithubRootBtn = document.getElementById('saveGithubRootBtn');
+const autoDetectBtn = document.getElementById('autoDetectBtn');
 
 let repos = [];
 let activeTabId = null;
@@ -104,13 +107,41 @@ function onRepoReorder() {
 makeSortable(repoListEl, 'y', onRepoReorder);
 makeSortable(tabBarEl, 'x');
 
-function showBanner(message) {
+function showBanner(message, type = 'error') {
   bannerEl.textContent = message;
+  bannerEl.classList.toggle('info', type === 'info');
   bannerEl.classList.remove('hidden');
 }
 function hideBanner() {
   bannerEl.classList.add('hidden');
 }
+
+// ---------- GitHub 根目錄 ----------
+async function loadGithubRoot() {
+  const res = await window.packagerAPI.getSettings();
+  if (res.ok && res.settings.githubRoot) githubRootInput.value = res.settings.githubRoot;
+}
+
+saveGithubRootBtn.addEventListener('click', async () => {
+  const res = await window.packagerAPI.setGithubRoot(githubRootInput.value);
+  if (!res.ok) {
+    showBanner(res.error);
+    return;
+  }
+  showBanner('已儲存 GitHub 根目錄', 'info');
+});
+
+autoDetectBtn.addEventListener('click', async () => {
+  const res = await window.packagerAPI.autoDetectPaths();
+  if (!res.ok) {
+    showBanner(res.error);
+    return;
+  }
+  repos = res.repos;
+  applyRepoOrder(loadRepoOrder());
+  renderRepoList();
+  showBanner(res.matched > 0 ? `自動配對成功 ${res.matched} 個 repo 路徑` : '沒有找到符合的新路徑', 'info');
+});
 
 // ---------- Repo 清單 ----------
 async function loadRepos() {
@@ -439,3 +470,4 @@ extraArgsInput.addEventListener('change', savePrefs);
 
 loadRepos();
 loadEnvironments();
+loadGithubRoot();

@@ -7,8 +7,10 @@ const { XMLParser } = require('fast-xml-parser');
 
 // repos.json：可分享的部署設定（deploy profile、module），跟每個人的本機路徑無關
 // repos.local.json：只存這台電腦的 checkout 路徑，不分享、不進版控
+// settings.local.json：本機其他個人化設定（目前只有 GitHub 根目錄），也不分享
 const REPOS_CONFIG_PATH = path.join(__dirname, 'repos.json');
 const REPOS_LOCAL_PATH = path.join(__dirname, 'repos.local.json');
+const SETTINGS_LOCAL_PATH = path.join(__dirname, 'settings.local.json');
 const MAVEN_SETTINGS_PATH = path.join(os.homedir(), '.m2', 'settings.xml');
 
 let mainWindow;
@@ -71,6 +73,59 @@ function loadRepoProfiles() {
   const localPaths = loadLocalPaths();
   return repos.map((repo) => ({ ...repo, localPath: localPaths[repo.id] || null }));
 }
+
+function loadLocalSettings() {
+  if (!fs.existsSync(SETTINGS_LOCAL_PATH)) return {};
+  return JSON.parse(fs.readFileSync(SETTINGS_LOCAL_PATH, 'utf-8'));
+}
+
+function saveLocalSettings(settings) {
+  fs.writeFileSync(SETTINGS_LOCAL_PATH, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+}
+
+ipcMain.handle('get-settings', () => {
+  try {
+    return { ok: true, settings: loadLocalSettings() };
+  } catch (err) {
+    return { ok: false, error: `讀取設定失敗：${err.message}` };
+  }
+});
+
+ipcMain.handle('set-github-root', (event, { githubRoot }) => {
+  try {
+    const settings = loadLocalSettings();
+    settings.githubRoot = githubRoot?.trim() || null;
+    saveLocalSettings(settings);
+    return { ok: true, settings };
+  } catch (err) {
+    return { ok: false, error: `儲存失敗：${err.message}` };
+  }
+});
+
+// 只補「還沒設路徑」的 repo：猜 <githubRoot>\<repo id> 存在就採用，已有路徑的不覆蓋
+ipcMain.handle('auto-detect-paths', () => {
+  try {
+    const { githubRoot } = loadLocalSettings();
+    if (!githubRoot) return { ok: false, error: '尚未設定 GitHub 根目錄' };
+
+    const shareable = JSON.parse(fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8'));
+    const localPaths = loadLocalPaths();
+    let matched = 0;
+    shareable.forEach((repo) => {
+      if (localPaths[repo.id]) return;
+      const guess = path.join(githubRoot, repo.id);
+      if (fs.existsSync(guess)) {
+        localPaths[repo.id] = guess;
+        matched += 1;
+      }
+    });
+    saveLocalPaths(localPaths);
+
+    return { ok: true, matched, repos: loadRepoProfiles() };
+  } catch (err) {
+    return { ok: false, error: `自動偵測失敗：${err.message}` };
+  }
+});
 
 ipcMain.handle('list-repos', () => {
   try {

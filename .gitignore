@@ -1,3 +1,4 @@
 node_modules/
 repos.local.json
+settings.local.json
 dist/

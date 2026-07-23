@@ -5,6 +5,9 @@ contextBridge.exposeInMainWorld('packagerAPI', {
   addRepo: (repo) => ipcRenderer.invoke('add-repo', repo),
   updateRepo: (repo) => ipcRenderer.invoke('update-repo', repo),
   setRepoPath: (repoId, localPath) => ipcRenderer.invoke('set-repo-path', { repoId, localPath }),
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setGithubRoot: (githubRoot) => ipcRenderer.invoke('set-github-root', { githubRoot }),
+  autoDetectPaths: () => ipcRenderer.invoke('auto-detect-paths'),
   listEnvironments: () => ipcRenderer.invoke('list-environments'),
   runPackage: (repoIds, profileId, installType, options) =>
     ipcRenderer.invoke('run-package', { repoIds, profileId, installType, ...options }),
