@@ -1,0 +1,156 @@
+[
+  {
+    "id": "g6",
+    "displayName": "G6 (B2C)",
+    "installTargets": {
+      "bundle": {
+        "workingModule": "core",
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": "ui.apps",
+        "profile": "autoInstallPackage"
+      }
+    }
+  },
+  {
+    "id": "common",
+    "displayName": "Common",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "benqg5",
+    "displayName": "BenQ G5",
+    "installTargets": {
+      "bundle": {
+        "workingModule": "core",
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": "ui.apps",
+        "profile": "autoInstallPackage"
+      }
+    }
+  },
+  {
+    "id": "infty",
+    "displayName": "INFTY",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "education",
+    "displayName": "EDU",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "workspace",
+    "displayName": "Workspace",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "academy",
+    "displayName": "Academy",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "aem-author",
+    "displayName": "AEM Author",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "ai-translator",
+    "displayName": "AI Translator",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "aem-guide",
+    "displayName": "AEM Guide",
+    "installTargets": {
+      "bundle": {
+        "workingModule": null,
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": null,
+        "profile": "autoInstallSinglePackage"
+      }
+    }
+  },
+  {
+    "id": "g5gaming",
+    "displayName": "G5 Gaming",
+    "installTargets": {
+      "bundle": {
+        "workingModule": "core",
+        "profile": "autoInstallBundle"
+      },
+      "package": {
+        "workingModule": "ui.apps",
+        "profile": "autoInstallPackage"
+      }
+    }
+  }
+]

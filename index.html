@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>Maven Packager</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span class="logo-mark">MP</span>
+        <div class="logo-text">
+          <div class="logo-title">Maven Packager</div>
+          <div class="logo-sub">跨 repo 一鍵打包</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section-label">
+        REPOS
+        <span>
+          <button id="addRepoBtn" class="link-btn">+ 新增</button>
+          <button id="selectAllBtn" class="link-btn">全選</button>
+        </span>
+      </div>
+      <div id="repoList" class="repo-list">
+        <div class="empty-hint">讀取 repos.json 中…</div>
+      </div>
+
+      <form id="addRepoForm" class="add-repo-form hidden">
+        <div id="addRepoFormTitle" class="add-repo-form-title">新增 Repo</div>
+        <input type="text" id="newRepoName" placeholder="顯示名稱" required />
+        <input type="text" id="newRepoPath" placeholder="本機路徑，例如 C:\workspace\xxx" required />
+        <input type="text" id="newRepoBundleModule" placeholder="Bundle workingModule（選填，如 core）" />
+        <input type="text" id="newRepoBundleProfile" placeholder="Bundle profile（如 autoInstallBundle）" />
+        <input type="text" id="newRepoPackageModule" placeholder="Package workingModule（選填，如 ui.apps）" />
+        <input type="text" id="newRepoPackageProfile" placeholder="Package profile（如 autoInstallPackage）" />
+        <div class="add-repo-form-actions">
+          <button type="submit" id="repoFormSubmitBtn" class="primary-btn small-btn">新增</button>
+          <button type="button" id="cancelAddRepoBtn" class="icon-btn small-btn">取消</button>
+        </div>
+      </form>
+    </aside>
+
+    <main class="main">
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <div class="field">
+            <label for="envSelect">環境（Maven profile）</label>
+            <div class="select-row">
+              <select id="envSelect" disabled>
+                <option>讀取中…</option>
+              </select>
+              <button id="refreshEnvBtn" class="icon-btn" title="重新讀取 settings.xml">⟳</button>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field">
+            <label>安裝方式</label>
+            <div class="segmented" id="installTypeSegmented">
+              <label class="segmented-option">
+                <input type="radio" name="installType" value="package" checked />
+                <span>整個專案</span>
+              </label>
+              <label class="segmented-option">
+                <input type="radio" name="installType" value="bundle" />
+                <span>只裝 Bundle</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field">
+            <label>&nbsp;</label>
+            <label class="checkbox-label checkbox-label-standalone">
+              <input type="checkbox" id="skipTestsChk" />
+              跳過測試
+            </label>
+          </div>
+        </div>
+
+        <div class="toolbar-row">
+          <div class="field field-grow">
+            <label for="extraArgsInput">額外 Maven 參數</label>
+            <input type="text" id="extraArgsInput" value="-T 1C" placeholder="例如 -T 24" />
+          </div>
+
+          <div class="spacer"></div>
+
+          <button id="runBtn" class="primary-btn" disabled>▶ 開始打包</button>
+          <button id="stopBtn" class="danger-btn hidden">■ 停止全部</button>
+        </div>
+      </div>
+
+      <div id="banner" class="banner hidden"></div>
+
+      <div class="log-area">
+        <div id="tabBar" class="tab-bar"></div>
+        <div id="logPanels" class="log-panels"></div>
+      </div>
+    </main>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
