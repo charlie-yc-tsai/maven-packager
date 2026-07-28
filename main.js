@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -87,7 +87,7 @@ ipcMain.handle('get-settings', () => {
   try {
     return { ok: true, settings: loadLocalSettings() };
   } catch (err) {
-    return { ok: false, error: `讀取設定失敗：${err.message}` };
+    return { ok: false, error: `Failed to read settings: ${err.message}` };
   }
 });
 
@@ -98,7 +98,7 @@ ipcMain.handle('set-github-root', (event, { githubRoot }) => {
     saveLocalSettings(settings);
     return { ok: true, settings };
   } catch (err) {
-    return { ok: false, error: `儲存失敗：${err.message}` };
+    return { ok: false, error: `Failed to save: ${err.message}` };
   }
 });
 
@@ -106,7 +106,7 @@ ipcMain.handle('set-github-root', (event, { githubRoot }) => {
 ipcMain.handle('auto-detect-paths', () => {
   try {
     const { githubRoot } = loadLocalSettings();
-    if (!githubRoot) return { ok: false, error: '尚未設定 GitHub 根目錄' };
+    if (!githubRoot) return { ok: false, error: 'GitHub root folder is not set yet' };
 
     const shareable = JSON.parse(fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8'));
     const localPaths = loadLocalPaths();
@@ -123,7 +123,7 @@ ipcMain.handle('auto-detect-paths', () => {
 
     return { ok: true, matched, repos: loadRepoProfiles() };
   } catch (err) {
-    return { ok: false, error: `自動偵測失敗：${err.message}` };
+    return { ok: false, error: `Auto-detect failed: ${err.message}` };
   }
 });
 
@@ -131,7 +131,7 @@ ipcMain.handle('list-repos', () => {
   try {
     return { ok: true, repos: loadRepoProfiles() };
   } catch (err) {
-    return { ok: false, error: `讀取 repos.json 失敗：${err.message}` };
+    return { ok: false, error: `Failed to read repos.json: ${err.message}` };
   }
 });
 
@@ -149,7 +149,7 @@ ipcMain.handle(
   (event, { displayName, localPath, bundleModule, bundleProfile, packageModule, packageProfile }) => {
     try {
       if (!displayName?.trim() || !localPath?.trim()) {
-        return { ok: false, error: '顯示名稱與本機路徑為必填' };
+        return { ok: false, error: 'Display name and local path are required' };
       }
       const shareable = JSON.parse(fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8'));
       const repo = {
@@ -175,7 +175,7 @@ ipcMain.handle(
 
       return { ok: true, repos: loadRepoProfiles() };
     } catch (err) {
-      return { ok: false, error: `新增 repo 失敗：${err.message}` };
+      return { ok: false, error: `Failed to add repo: ${err.message}` };
     }
   }
 );
@@ -185,11 +185,11 @@ ipcMain.handle(
   (event, { id, displayName, localPath, bundleModule, bundleProfile, packageModule, packageProfile }) => {
     try {
       if (!displayName?.trim() || !localPath?.trim()) {
-        return { ok: false, error: '顯示名稱與本機路徑為必填' };
+        return { ok: false, error: 'Display name and local path are required' };
       }
       const shareable = JSON.parse(fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8'));
       const repo = shareable.find((r) => r.id === id);
-      if (!repo) return { ok: false, error: 'repos.json 中找不到此 repo' };
+      if (!repo) return { ok: false, error: 'Repo not found in repos.json' };
 
       repo.displayName = displayName.trim();
       repo.installTargets = {
@@ -210,27 +210,116 @@ ipcMain.handle(
 
       return { ok: true, repos: loadRepoProfiles() };
     } catch (err) {
-      return { ok: false, error: `更新 repo 失敗：${err.message}` };
+      return { ok: false, error: `Failed to update repo: ${err.message}` };
     }
   }
 );
 
+ipcMain.handle('delete-repo', (event, { id }) => {
+  try {
+    if (runningProcesses.has(id)) {
+      return { ok: false, error: 'This repo is running, stop it before deleting' };
+    }
+    const shareable = JSON.parse(fs.readFileSync(REPOS_CONFIG_PATH, 'utf-8'));
+    const next = shareable.filter((r) => r.id !== id);
+    fs.writeFileSync(REPOS_CONFIG_PATH, JSON.stringify(next, null, 2) + '\n', 'utf-8');
+
+    const localPaths = loadLocalPaths();
+    delete localPaths[id];
+    saveLocalPaths(localPaths);
+
+    return { ok: true, repos: loadRepoProfiles() };
+  } catch (err) {
+    return { ok: false, error: `Failed to delete repo: ${err.message}` };
+  }
+});
+
 ipcMain.handle('set-repo-path', (event, { repoId, localPath }) => {
   try {
-    if (!localPath?.trim()) return { ok: false, error: '本機路徑為必填' };
+    if (!localPath?.trim()) return { ok: false, error: 'Local path is required' };
     const localPaths = loadLocalPaths();
     localPaths[repoId] = localPath.trim();
     saveLocalPaths(localPaths);
     return { ok: true, repos: loadRepoProfiles() };
   } catch (err) {
-    return { ok: false, error: `設定路徑失敗：${err.message}` };
+    return { ok: false, error: `Failed to set path: ${err.message}` };
+  }
+});
+
+// ---------- Git 分支切換 ----------
+ipcMain.handle('list-branches', (event, { repoId }) => {
+  try {
+    const repo = loadRepoProfiles().find((r) => r.id === repoId);
+    if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
+    const local = execFileSync('git', ['branch', '--format=%(refname:short)'], {
+      cwd: repo.localPath,
+      encoding: 'utf-8',
+    }).split('\n').map((s) => s.trim()).filter(Boolean);
+    // 遠端分支：origin/xxx 去掉字首跟本機分支合併顯示，才選得到「本機還沒 checkout 過」的分支
+    const remote = execFileSync('git', ['branch', '-r', '--format=%(refname:short)'], {
+      cwd: repo.localPath,
+      encoding: 'utf-8',
+    })
+      .split('\n')
+      .map((s) => s.trim())
+      .filter((s) => s && !s.endsWith('/HEAD'))
+      .map((s) => s.replace(/^origin\//, ''));
+    const branches = [...new Set([...local, ...remote])];
+    const current = execFileSync('git', ['branch', '--show-current'], {
+      cwd: repo.localPath,
+      encoding: 'utf-8',
+    }).trim();
+    return { ok: true, branches, current };
+  } catch (err) {
+    return { ok: false, error: `Failed to read branches: ${err.message}` };
+  }
+});
+
+// git fetch 用 spawn（而非 execFileSync）才能邊跑邊把 --progress 輸出串給前端，
+// 讓使用者看得到「正在抓」而不是整個 UI 卡住等一個看不到進度的 IPC
+ipcMain.handle('fetch-repo', (event, { repoId }) => {
+  const repo = loadRepoProfiles().find((r) => r.id === repoId);
+  const sender = event.sender;
+  if (!repo?.localPath) return Promise.resolve({ ok: false, error: 'Local path is not set yet' });
+
+  return new Promise((resolve) => {
+    sender.send('fetch-start', { repoId });
+    const proc = spawn('git', ['fetch', '--all', '--prune', '--progress'], {
+      cwd: repo.localPath,
+      shell: true,
+    });
+    // git 的 --progress 輸出是寫到 stderr，不代表是錯誤
+    proc.stdout.on('data', (d) => sender.send('fetch-log', { repoId, line: d.toString() }));
+    proc.stderr.on('data', (d) => sender.send('fetch-log', { repoId, line: d.toString() }));
+    proc.on('error', (err) => {
+      sender.send('fetch-done', { repoId, success: false, error: err.message });
+      resolve({ ok: false, error: `Failed to start git: ${err.message}` });
+    });
+    proc.on('close', (code) => {
+      const success = code === 0;
+      sender.send('fetch-done', { repoId, success });
+      resolve(success ? { ok: true } : { ok: false, error: `git fetch exit code ${code}` });
+    });
+  });
+});
+
+ipcMain.handle('checkout-branch', (event, { repoId, branch }) => {
+  try {
+    if (!branch?.trim()) return { ok: false, error: 'Branch name is required' };
+    if (runningProcesses.has(repoId)) return { ok: false, error: 'This repo is running, stop it before switching branches' };
+    const repo = loadRepoProfiles().find((r) => r.id === repoId);
+    if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
+    execFileSync('git', ['checkout', branch], { cwd: repo.localPath, encoding: 'utf-8' });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: `Failed to switch branch: ${err.message}` };
   }
 });
 
 // ---------- 動態解析 Maven settings.xml 的 profile id ----------
 function listMavenProfileIds() {
   if (!fs.existsSync(MAVEN_SETTINGS_PATH)) {
-    throw new Error(`找不到 ${MAVEN_SETTINGS_PATH}，請確認 Maven settings.xml 是否存在`);
+    throw new Error(`${MAVEN_SETTINGS_PATH} not found, check that Maven settings.xml exists`);
   }
   const xml = fs.readFileSync(MAVEN_SETTINGS_PATH, 'utf-8');
   const parsed = new XMLParser().parse(xml);
@@ -252,7 +341,7 @@ ipcMain.handle('list-environments', () => {
 });
 
 // ---------- 執行打包 ----------
-const INSTALL_TYPE_LABELS = { bundle: '只裝 Bundle', package: '裝整個專案' };
+const INSTALL_TYPE_LABELS = { bundle: 'Bundle only', package: 'Whole project' };
 
 // repoIds: string[], profileId: string, installType: 'bundle' | 'package',
 // skipTests: boolean, extraArgs: string（使用者手動輸入，如 "-T 24"）
@@ -265,7 +354,7 @@ ipcMain.handle('run-package', async (event, { repoIds, profileId, installType, s
   const tasks = repoIds.map((repoId) => {
     const repo = repos.find((r) => r.id === repoId);
     if (!repo) {
-      sender.send('build-done', { repoId, success: false, error: 'repos.json 中找不到此 repo' });
+      sender.send('build-done', { repoId, success: false, error: 'Repo not found in repos.json' });
       return Promise.resolve();
     }
     return runMavenProcess(repo, profileId, installType, skipTests, extraArgList, sender).catch(() => {
@@ -280,7 +369,7 @@ ipcMain.handle('run-package', async (event, { repoIds, profileId, installType, s
 function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, sender) {
   return new Promise((resolve, reject) => {
     if (!repo.localPath || !fs.existsSync(repo.localPath)) {
-      const msg = repo.localPath ? `路徑不存在：${repo.localPath}` : '尚未設定此 repo 的本機路徑';
+      const msg = repo.localPath ? `Path does not exist: ${repo.localPath}` : 'Local path is not set for this repo yet';
       sender.send('build-log', { repoId: repo.id, line: msg, isError: true });
       sender.send('build-done', { repoId: repo.id, success: false, error: msg });
       return reject(new Error(msg));
@@ -288,7 +377,7 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
 
     const target = repo.installTargets?.[installType];
     if (!target?.profile) {
-      const msg = `此 repo 未設定「${INSTALL_TYPE_LABELS[installType] || installType}」的部署 profile`;
+      const msg = `This repo has no deploy profile configured for "${INSTALL_TYPE_LABELS[installType] || installType}"`;
       sender.send('build-log', { repoId: repo.id, line: msg, isError: true });
       sender.send('build-done', { repoId: repo.id, success: false, error: msg });
       return reject(new Error(msg));
@@ -296,7 +385,7 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
 
     const javaHome = getCurrentJavaHome();
     if (!javaHome || !fs.existsSync(path.join(javaHome, 'bin', 'java.exe'))) {
-      const msg = `JAVA_HOME 無效：${javaHome || '(未設定)'}`;
+      const msg = `Invalid JAVA_HOME: ${javaHome || '(not set)'}`;
       sender.send('build-log', { repoId: repo.id, line: msg, isError: true });
       sender.send('build-done', { repoId: repo.id, success: false, error: msg });
       return reject(new Error(msg));
@@ -327,7 +416,7 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
       sender.send('build-log', { repoId: repo.id, line: data.toString(), isError: true });
     });
     proc.on('error', (err) => {
-      sender.send('build-log', { repoId: repo.id, line: `無法啟動 mvn：${err.message}`, isError: true });
+      sender.send('build-log', { repoId: repo.id, line: `Failed to start mvn: ${err.message}`, isError: true });
     });
     proc.on('close', (code) => {
       runningProcesses.delete(repo.id);
@@ -340,9 +429,9 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
 
 ipcMain.handle('cancel-package', (event, { repoId }) => {
   const proc = runningProcesses.get(repoId);
-  if (!proc) return { ok: false, error: '找不到執行中的行程' };
+  if (!proc) return { ok: false, error: 'No running process found' };
 
-  event.sender.send('build-log', { repoId, line: '[使用者要求停止]', isError: true });
+  event.sender.send('build-log', { repoId, line: '[Stop requested by user]', isError: true });
   try {
     // Windows 上直接 kill 子行程有時殺不掉整個 mvn.cmd 樹，改用 taskkill 較穩；
     // 用同步版本才能知道是否真的成功，避免刪掉行程卻沒發現失敗
@@ -353,7 +442,7 @@ ipcMain.handle('cancel-package', (event, { repoId }) => {
     }
     return { ok: true };
   } catch (err) {
-    const msg = `停止失敗：${err.message}`;
+    const msg = `Failed to stop: ${err.message}`;
     event.sender.send('build-log', { repoId, line: msg, isError: true });
     return { ok: false, error: msg };
   }

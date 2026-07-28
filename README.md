@@ -2,6 +2,10 @@
 
 跨 repo 一鍵打包工具（Electron app）。勾選 repo、選環境、選安裝方式，一鍵平行執行
 `mvn clean install`，每個 repo 各自一個 log 分頁即時看輸出，可單獨/整批停止、重新開始。
+另外內建 Git 分支切換／fetch，不用切去終端機操作。
+
+> 介面文字為英文，本文件括號附上實際按鈕/欄位標籤方便對照。若要看英文版說明文件，見
+> [README.en.md](README.en.md)。
 
 ## 安裝與執行
 
@@ -31,33 +35,49 @@ App 啟動時會自動合併 `repos.json` + `repos.local.json`；缺路徑的 re
 
 ### 補路徑的三種方式
 
-1. 側邊欄看到「未設路徑」的 repo，直接輸入路徑按存。
-2. 側邊欄最上方設定「GitHub 根目錄」，按「自動偵測 repo 路徑」——會對每個還沒設路徑的 repo 猜
+1. 側邊欄看到「未設路徑」的 repo，直接輸入路徑按存（Save）。
+2. 側邊欄最上方設定「GitHub root folder」，按「Auto-detect repo paths」——會對每個還沒設路徑的 repo 猜
    `<根目錄>\<repo id>`，資料夾存在就自動填（Windows 路徑不分大小寫，`g6` 猜得到 `G6`）。
-3. 點 repo 名稱旁的 ✎ 開編輯表單，手動填。
+3. 點 repo 名稱旁的 ✎ 開編輯表單，手動填。編輯／刪除（✎／🗑）圖示平常是隱藏的，滑到該列或用鍵盤聚焦才會顯示，
+   刪除按鈕滑過會變紅色提醒是危險動作。
 
 ### 新增 / 編輯 repo
 
-側邊欄「+ 新增」開表單，填顯示名稱、本機路徑，以及 Bundle / Package 各自的 workingModule + profile
-（哪個 repo 需要看它自己的 `pom.xml` 有哪些 `autoInstall*` profile，定義在哪個模組）。
-既有 repo 可點 ✎ 用同一個表單編輯（id 不可改）。
+側邊欄「+ Add」開表單，填顯示名稱、本機路徑，以及 Bundle / Package 各自的 workingModule + profile
+（哪個 repo 需要看它自己的 `pom.xml` 有哪些 `autoInstall*` profile，定義在哪個模組。多數專案的 Bundle
+安裝都要切到 `core` 模組）。既有 repo 可點 ✎ 用同一個表單編輯（id 不可改）。
 
 ## 使用方式
 
-1. 左側勾選要打包的 repo（可多選、可拖曳排序、可按「全選」）。
-2. 上方選「環境」（`~/.m2/settings.xml` 裡的 profile id，如 `testing`／`staging`；預設「本機安裝」不吃
-   settings.xml，直接用 repo 自己 profile 裡設好的預設值）。`adobe-public` 是 repository/proxy 設定用的，
-   不會出現在清單。
-3. 選「安裝方式」：整個專案（`autoInstallPackage`/`autoInstallSinglePackage`）或只裝 Bundle
-   （`autoInstallBundle`）。
-4. 需要的話勾「跳過測試」（加 `-DskipTests`）、填「額外 Maven 參數」（如 `-T 1C` 全核心平行編譯，逐字接在
-   指令最後）。
-5. 按「▶ 開始打包」，右側依 repo 各開一個 log 分頁，即時顯示 `mvn` 輸出；`[ERROR]` 紅字、`[WARNING]` 黃字。
+1. 左側勾選要打包的 repo（可多選、可拖曳排序、可按「Select all」）。
+2. 上方選「Environment (Maven profile)」（`~/.m2/settings.xml` 裡的 profile id，如 `testing`／`staging`；
+   預設「Local install (no profile needed)」不吃 settings.xml，直接用 repo 自己 profile 裡設好的預設值）。
+   `adobe-public` 是 repository/proxy 設定用的，不會出現在清單。
+3. 選「Install type」：整個專案（Whole project，`autoInstallPackage`/`autoInstallSinglePackage`）或只裝
+   Bundle（Bundle only，`autoInstallBundle`）。
+4. 需要的話勾「Skip tests」（加 `-DskipTests`）、填「Extra Maven arguments」（如 `-T 1C` 全核心平行編譯，
+   逐字接在指令最後）。
+5. 按「▶ Start packaging」，右側依 repo 各開一個 log 分頁，即時顯示 `mvn` 輸出；`[ERROR]` 紅字、
+   `[WARNING]` 黃字。
 6. 每個分頁自己有 ▶（開始/重新開始，只影響這個 repo）跟 ■（停止這個 repo）；也可以在某些 repo 還在跑時
-   額外勾選別的 repo 再按開始，不用等前面跑完。上方「■ 停止全部」一次停掉所有正在跑的。
+   額外勾選別的 repo 再按開始，不用等前面跑完。上方「■ Stop all」一次停掉所有正在跑的。
 7. 左側狀態燈號（分頁上也有）：灰＝待執行、黃（閃爍）＝執行中、綠＝成功、紅＝失敗。
 
 環境、安裝方式、跳過測試、額外參數這些選擇會記在瀏覽器 `localStorage`，重開 app 不會消失。
+
+### Git 分支切換
+
+左側**剛好勾選一個** repo 時，工具列下方會浮出一條「Git branch」bar（勾 0 個或多個都不會顯示，這是
+針對單一 repo 的動作，跟上面的打包設定分開）：
+
+- 分支輸入框會自動載入該 repo 目前的分支，並列出本機分支＋遠端分支（`origin/xxx` 已去掉字首），輸入文字
+  可用瀏覽器原生自動完成搜尋。
+- 按「切換 Switch」用 `git checkout` 切過去；若打的名字只有遠端有、本機沒有，git 會自動建立追蹤分支。
+- 按「⇣」執行 `git fetch --all --prune`，過程會借用 log 分頁即時顯示 `--progress` 輸出，並自動切到那個
+  分頁；完成會跳出頂部提示（4 秒後自動收掉）。
+- 勾選「Auto-fetch on select」後，左側每次勾選 repo 都會自動先 fetch 再列分支，不用手動按 ⇣（狀態記在
+  `localStorage`，預設不勾）。
+- 該 repo 正在打包中時，不能切換分支（IPC 層跟 UI 層都有擋）。
 
 ## 打包成單一 exe 發佈
 
@@ -79,6 +99,8 @@ Windows 需要開啟「開發人員模式」（設定 → 隱私權與安全性 
   在 `main.js` 補拓撲排序邏輯。
 - Windows 上 `spawn('mvn', ...)` 用 `shell: true` 解析 `mvn.cmd`；停止行程用 `taskkill /T /F` 才能連
   `mvn.cmd` 底下的子行程一起砍掉。
+- **git fetch 用 `spawn` 而非同步 exec**：邊跑邊把 `--progress` 輸出串給前端，避免整個 UI 卡住等一個看不到
+  進度的 IPC；分支列表則合併 `git branch` 跟 `git branch -r`，才選得到本機還沒 checkout 過的遠端分支。
 
 ## 已知限制
 
@@ -87,3 +109,5 @@ Windows 需要開啟「開發人員模式」（設定 → 隱私權與安全性 
 - 沒有「暫停/繼續」，`■ 停止` 是直接 kill 整個行程樹。
 - 重新執行一個「已完成」的 repo 會沿用同一個 log 分頁（清空舊 log），但如果是在它還在跑的時候點重新開始，
   按鈕會被停用擋掉，不會出現兩個行程搶同一個 repo 的狀況。
+- Git 分支切換一次只能對單一勾選的 repo 操作；勾多個 repo 時分支 bar 不會顯示。若目標分支有未提交的變更
+  擋住 `git checkout`，會直接顯示 git 原生的錯誤訊息，工具本身不做額外處理（例如強制切換或自動 stash）。

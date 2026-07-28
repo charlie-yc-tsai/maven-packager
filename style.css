@@ -125,6 +125,8 @@ html, body {
 .link-btn:hover { text-decoration: underline; }
 
 .repo-list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -158,6 +160,22 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 編輯／刪除只在滑過或聚焦該列時才顯示，列表一多，常駐的橘色圖示很吵；
+   刪除另外標紅，跟編輯的一般色區分開，才是「危險動作」該有的視覺提示 */
+.repo-list label.repo-item .repo-edit-btn,
+.repo-list label.repo-item .repo-delete-btn {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.repo-list label.repo-item:hover .repo-edit-btn,
+.repo-list label.repo-item:hover .repo-delete-btn,
+.repo-list label.repo-item:focus-within .repo-edit-btn,
+.repo-list label.repo-item:focus-within .repo-delete-btn {
+  opacity: 1;
+}
+.repo-delete-btn { color: var(--text-muted); }
+.repo-delete-btn:hover { color: var(--status-fail); }
 
 .repo-item-nopath {
   cursor: default;
@@ -306,6 +324,48 @@ html, body {
   padding: 7px 0;
 }
 
+/* 「Git 分支」是針對單一勾選 repo 的動作，跟上面「怎麼打包」的設定不是同一件事，
+   獨立成一條 contextual bar：只在剛好勾一個 repo 時浮出來，用左邊 accent 色條跟 toolbar 區分開 */
+.branch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 20px 0 20px;
+  padding: 9px 14px;
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+.branch-bar.hidden { display: none; }
+
+.branch-bar-label {
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.branch-bar-label strong { color: var(--text); font-weight: 600; }
+
+.branch-bar-input {
+  flex: 1;
+  min-width: 120px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-family: var(--mono);
+}
+.branch-bar-input:disabled { color: var(--text-muted); }
+
+.branch-bar-autofetch {
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ---------- Main ---------- */
 .main {
   flex: 1;
@@ -325,7 +385,9 @@ html, body {
 
 .toolbar-row {
   display: flex;
-  align-items: flex-end;
+  /* flex-start，不用 flex-end：Git 分支欄位下面多了「自動 fetch」checkbox，比其他欄位高，
+     用 flex-end 對齊底部會讓其他欄位的輸入框跟著往下掉、跟 Git 分支欄位的輸入框對不齊 */
+  align-items: flex-start;
   gap: 20px;
   flex-wrap: wrap;
 }
@@ -392,6 +454,10 @@ select:disabled { color: var(--text-muted); }
 }
 
 .banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: 12px 20px 0 20px;
   padding: 9px 14px;
   border-radius: 6px;
@@ -400,6 +466,17 @@ select:disabled { color: var(--text-muted); }
   border: 1px solid rgba(248, 81, 73, 0.4);
   color: #ffb4b0;
 }
+.banner-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+.banner-close:hover { opacity: 1; }
 .banner.info {
   background: rgba(63, 185, 80, 0.12);
   border-color: rgba(63, 185, 80, 0.4);
@@ -472,6 +549,14 @@ select:disabled { color: var(--text-muted); }
 .tab-stop:hover:not(:disabled) {
   background: rgba(248, 81, 73, 0.3);
 }
+.tab-close {
+  color: var(--text-muted);
+  background: none;
+}
+.tab-close:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--border);
+}
 
 .danger-btn {
   background: transparent;
@@ -502,6 +587,15 @@ select:disabled { color: var(--text-muted); }
   min-height: 0;
 }
 .log-panel.active { display: flex; }
+
+.log-panels:empty::before {
+  content: 'Check a repo on the left and click "Start packaging", or use the Git branch bar above — output shows up here';
+  margin: auto;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 20px;
+}
 
 .log-panel-cmd {
   font-family: var(--mono);

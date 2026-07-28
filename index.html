@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <title>Maven Packager</title>
@@ -12,41 +12,41 @@
         <span class="logo-mark">MP</span>
         <div class="logo-text">
           <div class="logo-title">Maven Packager</div>
-          <div class="logo-sub">跨 repo 一鍵打包</div>
+          <div class="logo-sub">One-click packaging across repos</div>
         </div>
       </div>
 
       <div class="github-root-field">
-        <label for="githubRootInput">GitHub 根目錄</label>
+        <label for="githubRootInput">GitHub root folder</label>
         <div class="select-row">
-          <input type="text" id="githubRootInput" placeholder="例如 C:\Users\xxx\Documents\GitHub" />
-          <button id="saveGithubRootBtn" class="icon-btn" title="儲存根目錄">✓</button>
+          <input type="text" id="githubRootInput" placeholder="e.g. C:\Users\xxx\Documents\GitHub" />
+          <button id="saveGithubRootBtn" class="icon-btn" title="Save root folder">✓</button>
         </div>
-        <button id="autoDetectBtn" class="link-btn github-auto-detect-btn">自動偵測 repo 路徑</button>
+        <button id="autoDetectBtn" class="link-btn github-auto-detect-btn">Auto-detect repo paths</button>
       </div>
 
       <div class="sidebar-section-label">
         REPOS
         <span>
-          <button id="addRepoBtn" class="link-btn">+ 新增</button>
-          <button id="selectAllBtn" class="link-btn">全選</button>
+          <button id="addRepoBtn" class="link-btn">+ Add</button>
+          <button id="selectAllBtn" class="link-btn">Select all</button>
         </span>
       </div>
       <div id="repoList" class="repo-list">
-        <div class="empty-hint">讀取 repos.json 中…</div>
+        <div class="empty-hint">Loading repos.json…</div>
       </div>
 
       <form id="addRepoForm" class="add-repo-form hidden">
-        <div id="addRepoFormTitle" class="add-repo-form-title">新增 Repo</div>
-        <input type="text" id="newRepoName" placeholder="顯示名稱" required />
-        <input type="text" id="newRepoPath" placeholder="本機路徑，例如 C:\workspace\xxx" required />
-        <input type="text" id="newRepoBundleModule" placeholder="Bundle workingModule（選填，如 core）" />
-        <input type="text" id="newRepoBundleProfile" placeholder="Bundle profile（如 autoInstallBundle）" />
-        <input type="text" id="newRepoPackageModule" placeholder="Package workingModule（選填，如 ui.apps）" />
-        <input type="text" id="newRepoPackageProfile" placeholder="Package profile（如 autoInstallPackage）" />
+        <div id="addRepoFormTitle" class="add-repo-form-title">Add Repo</div>
+        <input type="text" id="newRepoName" placeholder="Display name" required />
+        <input type="text" id="newRepoPath" placeholder="Local path, e.g. C:\workspace\xxx" required />
+        <input type="text" id="newRepoBundleModule" placeholder="Bundle workingModule (optional, e.g. core)" />
+        <input type="text" id="newRepoBundleProfile" placeholder="Bundle profile (e.g. autoInstallBundle)" />
+        <input type="text" id="newRepoPackageModule" placeholder="Package workingModule (optional, e.g. ui.apps)" />
+        <input type="text" id="newRepoPackageProfile" placeholder="Package profile (e.g. autoInstallPackage)" />
         <div class="add-repo-form-actions">
-          <button type="submit" id="repoFormSubmitBtn" class="primary-btn small-btn">新增</button>
-          <button type="button" id="cancelAddRepoBtn" class="icon-btn small-btn">取消</button>
+          <button type="submit" id="repoFormSubmitBtn" class="primary-btn small-btn">Add</button>
+          <button type="button" id="cancelAddRepoBtn" class="icon-btn small-btn">Cancel</button>
         </div>
       </form>
     </aside>
@@ -55,27 +55,27 @@
       <div class="toolbar">
         <div class="toolbar-row">
           <div class="field">
-            <label for="envSelect">環境（Maven profile）</label>
+            <label for="envSelect">Environment (Maven profile)</label>
             <div class="select-row">
               <select id="envSelect" disabled>
-                <option>讀取中…</option>
+                <option>Loading…</option>
               </select>
-              <button id="refreshEnvBtn" class="icon-btn" title="重新讀取 settings.xml">⟳</button>
+              <button id="refreshEnvBtn" class="icon-btn" title="Reload settings.xml">⟳</button>
             </div>
           </div>
 
           <div class="field-divider"></div>
 
           <div class="field">
-            <label>安裝方式</label>
+            <label>Install type</label>
             <div class="segmented" id="installTypeSegmented">
               <label class="segmented-option">
                 <input type="radio" name="installType" value="package" checked />
-                <span>整個專案</span>
+                <span>Whole project</span>
               </label>
               <label class="segmented-option">
                 <input type="radio" name="installType" value="bundle" />
-                <span>只裝 Bundle</span>
+                <span>Bundle only</span>
               </label>
             </div>
           </div>
@@ -86,25 +86,51 @@
             <label>&nbsp;</label>
             <label class="checkbox-label checkbox-label-standalone">
               <input type="checkbox" id="skipTestsChk" />
-              跳過測試
+              Skip tests
             </label>
           </div>
         </div>
 
         <div class="toolbar-row">
           <div class="field field-grow">
-            <label for="extraArgsInput">額外 Maven 參數</label>
-            <input type="text" id="extraArgsInput" value="-T 1C" placeholder="例如 -T 24" />
+            <label for="extraArgsInput">Extra Maven arguments</label>
+            <input type="text" id="extraArgsInput" value="-T 1C" placeholder="e.g. -T 24" />
           </div>
 
           <div class="spacer"></div>
 
-          <button id="runBtn" class="primary-btn" disabled>▶ 開始打包</button>
-          <button id="stopBtn" class="danger-btn hidden">■ 停止全部</button>
+          <button id="runBtn" class="primary-btn" disabled>▶ Start packaging</button>
+          <button id="stopBtn" class="danger-btn hidden">■ Stop all</button>
         </div>
       </div>
 
-      <div id="banner" class="banner hidden"></div>
+      <div id="branchBar" class="branch-bar hidden">
+        <span class="branch-bar-label">Git branch · <strong id="branchBarRepoName"></strong></span>
+        <input
+          id="branchInput"
+          class="branch-bar-input"
+          list="branchListOptions"
+          placeholder="Search branches…"
+          autocomplete="off"
+          disabled
+        />
+        <datalist id="branchListOptions"></datalist>
+        <button id="fetchBranchBtn" class="icon-btn" title="git fetch (pull latest remote branches)" disabled>⇣</button>
+        <button id="refreshBranchBtn" class="icon-btn" title="Reload branches" disabled>⟳</button>
+        <button id="switchBranchBtn" class="primary-btn small-btn" title="Switch branch" disabled>Switch</button>
+        <label
+          class="checkbox-label branch-bar-autofetch"
+          title="Auto git fetch when a repo is checked on the left, no need to click ⇣ manually"
+        >
+          <input type="checkbox" id="autoFetchChk" />
+          Auto-fetch on select
+        </label>
+      </div>
+
+      <div id="banner" class="banner hidden">
+        <span id="bannerMsg"></span>
+        <button id="bannerCloseBtn" class="banner-close" title="Close">✕</button>
+      </div>
 
       <div class="log-area">
         <div id="tabBar" class="tab-bar"></div>

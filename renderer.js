@@ -1,10 +1,20 @@
 const repoListEl = document.getElementById('repoList');
 const envSelect = document.getElementById('envSelect');
 const refreshEnvBtn = document.getElementById('refreshEnvBtn');
+const branchBarEl = document.getElementById('branchBar');
+const branchBarRepoNameEl = document.getElementById('branchBarRepoName');
+const branchInput = document.getElementById('branchInput');
+const branchListOptions = document.getElementById('branchListOptions');
+const fetchBranchBtn = document.getElementById('fetchBranchBtn');
+const autoFetchChk = document.getElementById('autoFetchChk');
+const refreshBranchBtn = document.getElementById('refreshBranchBtn');
+const switchBranchBtn = document.getElementById('switchBranchBtn');
 const selectAllBtn = document.getElementById('selectAllBtn');
 const runBtn = document.getElementById('runBtn');
 const stopBtn = document.getElementById('stopBtn');
 const bannerEl = document.getElementById('banner');
+const bannerMsgEl = document.getElementById('bannerMsg');
+const bannerCloseBtn = document.getElementById('bannerCloseBtn');
 const tabBarEl = document.getElementById('tabBar');
 const logPanelsEl = document.getElementById('logPanels');
 const addRepoBtn = document.getElementById('addRepoBtn');
@@ -107,14 +117,20 @@ function onRepoReorder() {
 makeSortable(repoListEl, 'y', onRepoReorder);
 makeSortable(tabBarEl, 'x');
 
+// info 訊息（成功、完成通知）幾秒後自動收掉；錯誤訊息留著等使用者處理完自己關或做下一步操作
+let bannerTimer = null;
 function showBanner(message, type = 'error') {
-  bannerEl.textContent = message;
+  clearTimeout(bannerTimer);
+  bannerMsgEl.textContent = message;
   bannerEl.classList.toggle('info', type === 'info');
   bannerEl.classList.remove('hidden');
+  if (type === 'info') bannerTimer = setTimeout(hideBanner, 4000);
 }
 function hideBanner() {
+  clearTimeout(bannerTimer);
   bannerEl.classList.add('hidden');
 }
+bannerCloseBtn.addEventListener('click', hideBanner);
 
 // ---------- GitHub 根目錄 ----------
 async function loadGithubRoot() {
@@ -128,7 +144,7 @@ saveGithubRootBtn.addEventListener('click', async () => {
     showBanner(res.error);
     return;
   }
-  showBanner('已儲存 GitHub 根目錄', 'info');
+  showBanner('GitHub root folder saved', 'info');
 });
 
 autoDetectBtn.addEventListener('click', async () => {
@@ -140,7 +156,7 @@ autoDetectBtn.addEventListener('click', async () => {
   repos = res.repos;
   applyRepoOrder(loadRepoOrder());
   renderRepoList();
-  showBanner(res.matched > 0 ? `自動配對成功 ${res.matched} 個 repo 路徑` : '沒有找到符合的新路徑', 'info');
+  showBanner(res.matched > 0 ? `Auto-matched ${res.matched} repo path(s)` : 'No new matching paths found', 'info');
 });
 
 // ---------- Repo 清單 ----------
@@ -171,23 +187,143 @@ function renderRepoList() {
       <input type="checkbox" data-repo-id="${repo.id}" />
       <span class="status-dot" id="dot-${repo.id}"></span>
       <span class="repo-item-name">${repo.displayName}</span>
-      <button type="button" class="link-btn repo-edit-btn" title="編輯此 repo">✎</button>
+      <button type="button" class="link-btn repo-edit-btn" title="Edit this repo">✎</button>
+      <button type="button" class="link-btn repo-delete-btn" title="Delete this repo">🗑</button>
     `;
-    row.querySelector('input').addEventListener('change', updateRunButtonState);
+    row.querySelector('input[type="checkbox"]').addEventListener('change', updateRunButtonState);
     row.querySelector('.repo-edit-btn').addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       openEditForm(repo);
     });
+    row.querySelector('.repo-delete-btn').addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteRepo(repo);
+    });
     repoListEl.appendChild(row);
   });
+  updateBranchField();
 }
 
-// 既有 repo 用同一個表單編輯（新增/編輯共用），送出時用 editingRepoId 判斷要 add 還是 update
+// ---------- Git 分支 ----------
+// 這是獨立的 contextual bar：只在左側「剛好勾一個 repo」時浮出來，
+// 跟上面「怎麼打包」的 toolbar 是兩件事，不擠在同一排搶對齊
+// branchInput 搭配 <datalist> 用瀏覽器原生的輸入時篩選/搜尋，不用另外寫下拉元件
+let branchFieldRepoId = null;
+let branchFieldOptions = [];
+
+function resetBranchField() {
+  branchFieldRepoId = null;
+  branchFieldOptions = [];
+  branchBarEl.classList.add('hidden');
+}
+
+function updateBranchField() {
+  const ids = getSelectedRepoIds();
+  if (ids.length !== 1) return resetBranchField();
+  branchBarEl.classList.remove('hidden');
+  const repo = repos.find((r) => r.id === ids[0]);
+  branchBarRepoNameEl.textContent = repo ? repo.displayName : ids[0];
+  if (ids[0] === branchFieldRepoId) return; // 已經是這個 repo，不用重讀
+  if (autoFetchChk.checked) fetchThenLoadBranches(ids[0]);
+  else loadBranchField(ids[0]);
+}
+
+async function loadBranchField(repoId) {
+  branchFieldRepoId = repoId;
+  branchInput.disabled = true;
+  switchBranchBtn.disabled = true;
+  refreshBranchBtn.disabled = true;
+  fetchBranchBtn.disabled = true;
+  branchInput.value = '';
+  branchInput.placeholder = 'Loading…';
+  const res = await window.packagerAPI.listBranches(repoId);
+  if (branchFieldRepoId !== repoId) return; // 讀取途中使用者換了勾選，結果作廢
+  if (!res.ok) {
+    branchInput.placeholder = res.error;
+    refreshBranchBtn.disabled = false;
+    fetchBranchBtn.disabled = false;
+    return;
+  }
+  branchFieldOptions = res.branches;
+  branchListOptions.innerHTML = res.branches.map((b) => `<option value="${b}"></option>`).join('');
+  branchInput.value = res.current;
+  branchInput.placeholder = 'Search branches…';
+  branchInput.disabled = false;
+  refreshBranchBtn.disabled = false;
+  fetchBranchBtn.disabled = false;
+  switchBranchBtn.disabled = false;
+}
+
+refreshBranchBtn.addEventListener('click', () => {
+  if (branchFieldRepoId) loadBranchField(branchFieldRepoId);
+});
+branchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') switchBranchBtn.click();
+});
+
+async function fetchThenLoadBranches(repoId) {
+  branchFieldRepoId = repoId;
+  branchInput.disabled = true;
+  refreshBranchBtn.disabled = true;
+  switchBranchBtn.disabled = true;
+  fetchBranchBtn.disabled = true;
+  branchInput.value = '';
+  branchInput.placeholder = 'git fetch in progress…';
+  const res = await window.packagerAPI.fetchRepo(repoId);
+  if (branchFieldRepoId !== repoId) return; // fetch 途中使用者換了勾選，結果作廢
+  if (!res.ok) {
+    showBanner(res.error);
+    branchInput.placeholder = 'Search branches…';
+    branchInput.disabled = false;
+    refreshBranchBtn.disabled = false;
+    fetchBranchBtn.disabled = false;
+    switchBranchBtn.disabled = false; // fetch 失敗但原本讀到的分支清單還在，照樣可切
+    return;
+  }
+  await loadBranchField(repoId); // 重讀分支列表，撈到 fetch 後新出現的遠端分支
+}
+
+fetchBranchBtn.addEventListener('click', () => {
+  if (branchFieldRepoId) fetchThenLoadBranches(branchFieldRepoId);
+});
+
+// ---------- 自動 fetch 開關（記在 localStorage，跟其他打包偏好分開存）----------
+const AUTO_FETCH_KEY = 'aemPackagerAutoFetch';
+autoFetchChk.checked = localStorage.getItem(AUTO_FETCH_KEY) === '1';
+autoFetchChk.addEventListener('change', () => {
+  localStorage.setItem(AUTO_FETCH_KEY, autoFetchChk.checked ? '1' : '0');
+});
+
+switchBranchBtn.addEventListener('click', async () => {
+  const repoId = branchFieldRepoId;
+  const branch = branchInput.value.trim();
+  if (!repoId || !branch) return;
+  if (!branchFieldOptions.includes(branch)) {
+    showBanner(`Branch not found: "${branch}"`);
+    return;
+  }
+  if (runningRepoIds.has(repoId)) {
+    showBanner('This repo is running, stop it before switching branches');
+    return;
+  }
+  const repo = repos.find((r) => r.id === repoId);
+  switchBranchBtn.disabled = true;
+  const res = await window.packagerAPI.checkoutBranch(repoId, branch);
+  if (!res.ok) {
+    showBanner(res.error);
+  } else {
+    showBanner(`${repo.displayName} switched to ${branch}`, 'info');
+  }
+  loadBranchField(repoId);
+});
+
+// Existing repos share the same form for add/edit; editingRepoId decides add vs update on submit
 function openEditForm(repo) {
   editingRepoId = repo.id;
-  addRepoFormTitle.textContent = `編輯 Repo：${repo.displayName}`;
-  repoFormSubmitBtn.textContent = '更新';
+  addRepoFormTitle.textContent = `Edit Repo: ${repo.displayName}`;
+  repoFormSubmitBtn.textContent = 'Update';
   newRepoName.value = repo.displayName;
   newRepoPath.value = repo.localPath || '';
   newRepoBundleModule.value = repo.installTargets?.bundle?.workingModule || '';
@@ -198,10 +334,27 @@ function openEditForm(repo) {
   newRepoName.focus();
 }
 
+async function deleteRepo(repo) {
+  if (runningRepoIds.has(repo.id)) {
+    showBanner('This repo is running, stop it before deleting');
+    return;
+  }
+  if (!confirm(`Delete repo "${repo.displayName}"? This cannot be undone.`)) return;
+  const res = await window.packagerAPI.deleteRepo(repo.id);
+  if (!res.ok) {
+    showBanner(res.error);
+    return;
+  }
+  if (editingRepoId === repo.id) closeRepoForm();
+  repos = res.repos;
+  applyRepoOrder(loadRepoOrder());
+  renderRepoList();
+}
+
 function closeRepoForm() {
   editingRepoId = null;
-  addRepoFormTitle.textContent = '新增 Repo';
-  repoFormSubmitBtn.textContent = '新增';
+  addRepoFormTitle.textContent = 'Add Repo';
+  repoFormSubmitBtn.textContent = 'Add';
   addRepoForm.reset();
   addRepoForm.classList.add('hidden');
 }
@@ -215,11 +368,13 @@ function buildMissingPathRow(repo) {
   row.dataset.repoId = repo.id;
   row.innerHTML = `
     <span class="repo-item-name">${repo.displayName}</span>
-    <button type="button" class="link-btn repo-edit-btn" title="編輯此 repo">✎</button>
-    <input type="text" class="repo-path-input" placeholder="設定本機路徑…" />
-    <button type="button" class="link-btn repo-path-save">存</button>
+    <button type="button" class="link-btn repo-edit-btn" title="Edit this repo">✎</button>
+    <button type="button" class="link-btn repo-delete-btn" title="Delete this repo">🗑</button>
+    <input type="text" class="repo-path-input" placeholder="Set local path…" />
+    <button type="button" class="link-btn repo-path-save">Save</button>
   `;
   row.querySelector('.repo-edit-btn').addEventListener('click', () => openEditForm(repo));
+  row.querySelector('.repo-delete-btn').addEventListener('click', () => deleteRepo(repo));
   const input = row.querySelector('.repo-path-input');
   const save = async () => {
     if (!input.value.trim()) return;
@@ -245,8 +400,8 @@ addRepoBtn.addEventListener('click', () => {
     return;
   }
   editingRepoId = null;
-  addRepoFormTitle.textContent = '新增 Repo';
-  repoFormSubmitBtn.textContent = '新增';
+  addRepoFormTitle.textContent = 'Add Repo';
+  repoFormSubmitBtn.textContent = 'Add';
   addRepoForm.reset();
   addRepoForm.classList.remove('hidden');
   newRepoName.focus();
@@ -291,20 +446,20 @@ function getSelectedRepoIds() {
 // ---------- 環境（Maven profile） ----------
 async function loadEnvironments() {
   envSelect.disabled = true;
-  envSelect.innerHTML = '<option>讀取中…</option>';
+  envSelect.innerHTML = '<option>Loading…</option>';
   hideBanner();
 
   const res = await window.packagerAPI.listEnvironments();
   const profiles = res.ok ? res.profiles : [];
-  if (!res.ok) showBanner(`讀取 Maven settings.xml 失敗：${res.error}（仍可用本機安裝）`);
+  if (!res.ok) showBanner(`Failed to read Maven settings.xml: ${res.error} (local install still works)`);
 
-  // 本機安裝不需要 settings.xml，就算讀取失敗也一定有得選
-  const options = ['<option value="">本機安裝（不需選 profile）</option>']
+  // Local install doesn't need settings.xml, so there's always an option even if reading it failed
+  const options = ['<option value="">Local install (no profile needed)</option>']
     .concat(profiles.map((p) => `<option value="${p}">${p}</option>`));
   envSelect.innerHTML = options.join('');
 
   const savedProfile = loadPrefs().profile;
-  envSelect.value = profiles.includes(savedProfile) ? savedProfile : ''; // 沒有存過或選項已消失就退回本機安裝
+  envSelect.value = profiles.includes(savedProfile) ? savedProfile : ''; // fall back to local install if nothing saved or the option is gone
   envSelect.disabled = false;
   updateRunButtonState();
 }
@@ -315,6 +470,7 @@ envSelect.addEventListener('change', savePrefs);
 function updateRunButtonState() {
   const hasRepo = getSelectedRepoIds().length > 0;
   runBtn.disabled = !(hasRepo && !envSelect.disabled);
+  updateBranchField();
 }
 envSelect.addEventListener('change', updateRunButtonState);
 
@@ -348,8 +504,9 @@ function ensureTab(repoId, command) {
   tab.innerHTML = `
     <span class="status-dot" id="tab-dot-${repoId}"></span>
     <span class="tab-label">${repo ? repo.displayName : repoId}</span>
-    <button type="button" class="tab-action tab-start" title="開始／重新開始">▶</button>
-    <button type="button" class="tab-action tab-stop" title="停止此 repo">■</button>
+    <button type="button" class="tab-action tab-start" title="Start / restart">▶</button>
+    <button type="button" class="tab-action tab-stop" title="Stop this repo">■</button>
+    <button type="button" class="tab-action tab-close" title="Close this tab">✕</button>
   `;
   tab.addEventListener('click', () => activateTab(repoId));
   tab.querySelector('.tab-start').addEventListener('click', (e) => {
@@ -361,6 +518,10 @@ function ensureTab(repoId, command) {
   tab.querySelector('.tab-stop').addEventListener('click', (e) => {
     e.stopPropagation();
     window.packagerAPI.cancelPackage(repoId);
+  });
+  tab.querySelector('.tab-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeTab(repoId);
   });
   tabBarEl.appendChild(tab);
 
@@ -383,6 +544,20 @@ function setTabRunning(repoId, running) {
   if (!tab) return;
   tab.querySelector('.tab-start').disabled = running;
   tab.querySelector('.tab-stop').disabled = !running;
+  // 跑的時候不給關，不然 build-log/build-done 事件晚點到會把分頁重新生出來
+  tab.querySelector('.tab-close').disabled = running;
+}
+
+// 關掉分頁：跑中的不能關（setTabRunning 已擋掉點擊），關掉後如果原本是 active tab 就切去旁邊那個
+function closeTab(repoId) {
+  if (runningRepoIds.has(repoId)) return;
+  document.getElementById(`tab-${repoId}`)?.remove();
+  document.getElementById(`panel-${repoId}`)?.remove();
+  if (activeTabId === repoId) {
+    activeTabId = null;
+    const next = tabBarEl.firstElementChild;
+    if (next) activateTab(next.dataset.repoId);
+  }
 }
 
 function activateTab(repoId) {
@@ -451,7 +626,25 @@ window.packagerAPI.onBuildDone(({ repoId, success, error }) => {
   runningRepoIds.delete(repoId);
   setStatus(repoId, success ? 'success' : 'fail');
   setTabRunning(repoId, false);
-  if (error) appendLog(repoId, `[錯誤] ${error}`, true);
+  if (error) appendLog(repoId, `[Error] ${error}`, true);
+});
+
+// fetch 進度借用同一套 log tab 顯示，跟 mvn build 共用分頁但不算進 runningRepoIds
+// （fetch 不是「打包中」，不用擋 run/stop 按鈕，只是借地方讓使用者看到抓取進度）
+window.packagerAPI.onFetchStart(({ repoId }) => {
+  ensureTab(repoId, 'git fetch --all --prune');
+  activateTab(repoId); // 使用者剛按了 fetch，直接切過去，不然分頁躲在背後看不到進度
+  setStatus(repoId, 'running');
+});
+window.packagerAPI.onFetchLog(({ repoId, line }) => {
+  ensureTab(repoId);
+  appendLog(repoId, line, false);
+});
+window.packagerAPI.onFetchDone(({ repoId, success, error }) => {
+  setStatus(repoId, success ? 'success' : 'fail');
+  const repo = repos.find((r) => r.id === repoId);
+  appendLog(repoId, success ? '[git fetch done]' : `[git fetch failed] ${error || ''}`, !success);
+  if (success) showBanner(`${repo ? repo.displayName : repoId} git fetch done`, 'info');
 });
 
 // ---------- 初始化 ----------

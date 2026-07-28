@@ -18,7 +18,7 @@
     "displayName": "Common",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
@@ -46,7 +46,7 @@
     "displayName": "INFTY",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
@@ -60,7 +60,7 @@
     "displayName": "EDU",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
@@ -74,7 +74,7 @@
     "displayName": "Workspace",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
@@ -88,7 +88,7 @@
     "displayName": "Academy",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
@@ -102,7 +102,7 @@
     "displayName": "AEM Author",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
@@ -116,7 +116,7 @@
     "displayName": "AI Translator",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
@@ -130,7 +130,7 @@
     "displayName": "AEM Guide",
     "installTargets": {
       "bundle": {
-        "workingModule": null,
+        "workingModule": "core",
         "profile": "autoInstallBundle"
       },
       "package": {
