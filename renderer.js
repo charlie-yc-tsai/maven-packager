@@ -1,6 +1,9 @@
 const repoListEl = document.getElementById('repoList');
 const envSelect = document.getElementById('envSelect');
 const refreshEnvBtn = document.getElementById('refreshEnvBtn');
+const javaSelect = document.getElementById('javaSelect');
+const refreshJavaBtn = document.getElementById('refreshJavaBtn');
+const copyJavaPathBtn = document.getElementById('copyJavaPathBtn');
 const branchBarEl = document.getElementById('branchBar');
 const branchBarRepoNameEl = document.getElementById('branchBarRepoName');
 const branchInput = document.getElementById('branchInput');
@@ -48,6 +51,7 @@ function savePrefs() {
     PREFS_KEY,
     JSON.stringify({
       profile: envSelect.value,
+      javaHome: javaSelect.value,
       installType: document.querySelector('input[name="installType"]:checked')?.value,
       skipTests: skipTestsChk.checked,
       extraArgs: extraArgsInput.value,
@@ -467,6 +471,40 @@ async function loadEnvironments() {
 refreshEnvBtn.addEventListener('click', loadEnvironments);
 envSelect.addEventListener('change', savePrefs);
 
+// ---------- Java 版本 ----------
+// 掃常見安裝路徑挑 JDK；"System default" 走現有的即時查登錄檔邏輯，不覆蓋 JAVA_HOME
+let systemDefaultJavaHome = '';
+
+async function loadJavaHomes() {
+  javaSelect.disabled = true;
+  javaSelect.innerHTML = '<option>Loading…</option>';
+
+  const res = await window.packagerAPI.listJavaHomes();
+  const homes = res.ok ? res.homes : [];
+  if (!res.ok) showBanner(res.error);
+
+  systemDefaultJavaHome = (res.ok && res.current) || '';
+  const defaultTitle = systemDefaultJavaHome || 'JAVA_HOME not detected';
+  const options = [`<option value="" title="${defaultTitle}">System default</option>`].concat(
+    homes.map((h) => `<option value="${h.path}" title="${h.path}">${h.version}</option>`)
+  );
+  javaSelect.innerHTML = options.join('');
+
+  const savedJavaHome = loadPrefs().javaHome;
+  javaSelect.value = homes.some((h) => h.path === savedJavaHome) ? savedJavaHome : '';
+  javaSelect.disabled = false;
+}
+
+refreshJavaBtn.addEventListener('click', loadJavaHomes);
+javaSelect.addEventListener('change', savePrefs);
+
+copyJavaPathBtn.addEventListener('click', async () => {
+  const path = javaSelect.value || systemDefaultJavaHome;
+  if (!path) return showBanner('No JAVA_HOME path to copy');
+  await navigator.clipboard.writeText(path);
+  showBanner(`Copied: ${path}`, 'info');
+});
+
 function updateRunButtonState() {
   const hasRepo = getSelectedRepoIds().length > 0;
   runBtn.disabled = !(hasRepo && !envSelect.disabled);
@@ -604,6 +642,7 @@ async function startRepos(repoIds) {
   await window.packagerAPI.runPackage(toStart, profileId, installType, {
     skipTests: skipTestsChk.checked,
     extraArgs: extraArgsInput.value,
+    javaHome: javaSelect.value || null,
   });
 
   if (runningRepoIds.size === 0) stopBtn.classList.add('hidden');
@@ -663,4 +702,5 @@ extraArgsInput.addEventListener('change', savePrefs);
 
 loadRepos();
 loadEnvironments();
+loadJavaHomes();
 loadGithubRoot();

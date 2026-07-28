@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('packagerAPI', {
   setGithubRoot: (githubRoot) => ipcRenderer.invoke('set-github-root', { githubRoot }),
   autoDetectPaths: () => ipcRenderer.invoke('auto-detect-paths'),
   listEnvironments: () => ipcRenderer.invoke('list-environments'),
+  listJavaHomes: () => ipcRenderer.invoke('list-java-homes'),
   listBranches: (repoId) => ipcRenderer.invoke('list-branches', { repoId }),
   checkoutBranch: (repoId, branch) => ipcRenderer.invoke('checkout-branch', { repoId, branch }),
   fetchRepo: (repoId) => ipcRenderer.invoke('fetch-repo', { repoId }),

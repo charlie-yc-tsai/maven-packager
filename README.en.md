@@ -64,7 +64,9 @@ profiles exist and which module defines them — most projects need Bundle insta
    (e.g. `testing`, `staging`). The default, "Local install (no profile needed)", skips
    settings.xml entirely and just uses whatever default each repo's own profile already sets.
    `adobe-public` is a repository/proxy profile, not a deploy target, so it's filtered out of the
-   list.
+   list. Next to it, "Java version" auto-scans installed JDKs under `C:\Program Files\Java`,
+   `Eclipse Adoptium`, `Zulu`, `Microsoft`, and `BellSoft`; picking "System default" keeps the
+   existing registry-lookup `JAVA_HOME` behavior unchanged.
 3. Pick an "Install type": whole project ("Whole project", `autoInstallPackage` /
    `autoInstallSinglePackage`) or bundle only ("Bundle only", `autoInstallBundle`).
 4. Optionally check "Skip tests" (adds `-DskipTests`) and/or fill in "Extra Maven arguments"

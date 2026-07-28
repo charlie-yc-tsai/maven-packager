@@ -67,6 +67,19 @@
           <div class="field-divider"></div>
 
           <div class="field">
+            <label for="javaSelect">Java version</label>
+            <div class="select-row">
+              <select id="javaSelect" disabled>
+                <option>Loading…</option>
+              </select>
+              <button id="copyJavaPathBtn" class="icon-btn" title="Copy JAVA_HOME path">⧉</button>
+              <button id="refreshJavaBtn" class="icon-btn" title="Rescan installed JDKs">⟳</button>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field">
             <label>Install type</label>
             <div class="segmented" id="installTypeSegmented">
               <label class="segmented-option">
@@ -80,15 +93,6 @@
             </div>
           </div>
 
-          <div class="field-divider"></div>
-
-          <div class="field">
-            <label>&nbsp;</label>
-            <label class="checkbox-label checkbox-label-standalone">
-              <input type="checkbox" id="skipTestsChk" />
-              Skip tests
-            </label>
-          </div>
         </div>
 
         <div class="toolbar-row">
@@ -97,10 +101,23 @@
             <input type="text" id="extraArgsInput" value="-T 1C" placeholder="e.g. -T 24" />
           </div>
 
+          <div class="field">
+            <label>&nbsp;</label>
+            <label class="checkbox-label checkbox-label-standalone">
+              <input type="checkbox" id="skipTestsChk" />
+              Skip tests
+            </label>
+          </div>
+
           <div class="spacer"></div>
 
-          <button id="runBtn" class="primary-btn" disabled>▶ Start packaging</button>
-          <button id="stopBtn" class="danger-btn hidden">■ Stop all</button>
+          <div class="field">
+            <label>&nbsp;</label>
+            <div class="select-row">
+              <button id="runBtn" class="primary-btn" disabled>▶ Start packaging</button>
+              <button id="stopBtn" class="danger-btn hidden">■ Stop all</button>
+            </div>
+          </div>
         </div>
       </div>
 

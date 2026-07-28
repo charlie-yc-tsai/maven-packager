@@ -10,11 +10,11 @@
   "author": "Charlie Tsai",
   "license": "UNLICENSED",
   "devDependencies": {
-    "electron": "^31.0.0",
+    "electron": "^43.2.0",
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.4.0"
+    "fast-xml-parser": "^5.10.1"
   },
   "build": {
     "appId": "com.benq.maven-packager",

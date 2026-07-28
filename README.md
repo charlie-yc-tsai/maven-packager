@@ -53,6 +53,8 @@ App 啟動時會自動合併 `repos.json` + `repos.local.json`；缺路徑的 re
 2. 上方選「Environment (Maven profile)」（`~/.m2/settings.xml` 裡的 profile id，如 `testing`／`staging`；
    預設「Local install (no profile needed)」不吃 settings.xml，直接用 repo 自己 profile 裡設好的預設值）。
    `adobe-public` 是 repository/proxy 設定用的，不會出現在清單。
+   旁邊「Java version」會自動掃 `C:\Program Files\Java`、`Eclipse Adoptium`、`Zulu`、`Microsoft`、
+   `BellSoft` 底下裝好的 JDK 讓你選；選「System default」則沿用原本查登錄檔 JAVA_HOME 的行為，不覆蓋。
 3. 選「Install type」：整個專案（Whole project，`autoInstallPackage`/`autoInstallSinglePackage`）或只裝
    Bundle（Bundle only，`autoInstallBundle`）。
 4. 需要的話勾「Skip tests」（加 `-DskipTests`）、填「Extra Maven arguments」（如 `-T 1C` 全核心平行編譯，

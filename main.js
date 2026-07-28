@@ -36,6 +36,43 @@ function getCurrentJavaHome() {
   return process.env.JAVA_HOME;
 }
 
+// 掃常見的 Windows JDK 安裝路徑，讓使用者在 UI 上選，不用去改系統 JAVA_HOME
+const JAVA_INSTALL_ROOTS = [
+  'C:\\Program Files\\Java',
+  'C:\\Program Files\\Eclipse Adoptium',
+  'C:\\Program Files\\Zulu',
+  'C:\\Program Files\\Microsoft',
+  'C:\\Program Files\\BellSoft',
+];
+
+function findJavaHomes() {
+  const homes = [];
+  for (const root of JAVA_INSTALL_ROOTS) {
+    if (!fs.existsSync(root)) continue;
+    for (const name of fs.readdirSync(root)) {
+      const home = path.join(root, name);
+      if (!fs.existsSync(path.join(home, 'bin', 'java.exe'))) continue;
+      // JDK 自帶的 release 檔有 JAVA_VERSION="17.0.9" 這種行，比資料夾名稱可靠
+      let version = name;
+      const releaseFile = path.join(home, 'release');
+      if (fs.existsSync(releaseFile)) {
+        const match = fs.readFileSync(releaseFile, 'utf-8').match(/JAVA_VERSION="(.+)"/);
+        if (match) version = match[1];
+      }
+      homes.push({ path: home, version });
+    }
+  }
+  return homes;
+}
+
+ipcMain.handle('list-java-homes', () => {
+  try {
+    return { ok: true, homes: findJavaHomes(), current: getCurrentJavaHome() };
+  } catch (err) {
+    return { ok: false, error: `Failed to scan Java installs: ${err.message}` };
+  }
+});
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1180,
@@ -345,7 +382,7 @@ const INSTALL_TYPE_LABELS = { bundle: 'Bundle only', package: 'Whole project' };
 
 // repoIds: string[], profileId: string, installType: 'bundle' | 'package',
 // skipTests: boolean, extraArgs: string（使用者手動輸入，如 "-T 24"）
-ipcMain.handle('run-package', async (event, { repoIds, profileId, installType, skipTests, extraArgs }) => {
+ipcMain.handle('run-package', async (event, { repoIds, profileId, installType, skipTests, extraArgs, javaHome }) => {
   const repos = loadRepoProfiles();
   const sender = event.sender;
   const extraArgList = extraArgs?.trim() ? extraArgs.trim().split(/\s+/) : [];
@@ -357,7 +394,7 @@ ipcMain.handle('run-package', async (event, { repoIds, profileId, installType, s
       sender.send('build-done', { repoId, success: false, error: 'Repo not found in repos.json' });
       return Promise.resolve();
     }
-    return runMavenProcess(repo, profileId, installType, skipTests, extraArgList, sender).catch(() => {
+    return runMavenProcess(repo, profileId, installType, skipTests, extraArgList, sender, javaHome).catch(() => {
       /* 個別 repo 失敗不中斷其他 repo，錯誤已透過 build-done 送出 */
     });
   });
@@ -366,7 +403,7 @@ ipcMain.handle('run-package', async (event, { repoIds, profileId, installType, s
   return { ok: true };
 });
 
-function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, sender) {
+function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, sender, javaHomeOverride) {
   return new Promise((resolve, reject) => {
     if (!repo.localPath || !fs.existsSync(repo.localPath)) {
       const msg = repo.localPath ? `Path does not exist: ${repo.localPath}` : 'Local path is not set for this repo yet';
@@ -383,7 +420,7 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
       return reject(new Error(msg));
     }
 
-    const javaHome = getCurrentJavaHome();
+    const javaHome = javaHomeOverride || getCurrentJavaHome();
     if (!javaHome || !fs.existsSync(path.join(javaHome, 'bin', 'java.exe'))) {
       const msg = `Invalid JAVA_HOME: ${javaHome || '(not set)'}`;
       sender.send('build-log', { repoId: repo.id, line: msg, isError: true });
