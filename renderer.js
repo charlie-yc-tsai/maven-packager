@@ -176,11 +176,15 @@ async function loadRepos() {
   renderRepoList();
 }
 
+let showMissingRepos = false;
+
 function renderRepoList() {
   repoListEl.innerHTML = '';
+  const missing = [];
   repos.forEach((repo) => {
     if (!repo.localPath) {
-      repoListEl.appendChild(buildMissingPathRow(repo));
+      missing.push(repo);
+      if (showMissingRepos) repoListEl.appendChild(buildMissingPathRow(repo));
       return;
     }
     const row = document.createElement('label');
@@ -208,6 +212,19 @@ function renderRepoList() {
     });
     repoListEl.appendChild(row);
   });
+  if (missing.length > 0) {
+    const hint = document.createElement('button');
+    hint.type = 'button';
+    hint.className = 'link-btn repo-missing-hint';
+    hint.textContent = showMissingRepos
+      ? `Hide ${missing.length} repo(s) not found locally`
+      : `${missing.length} repo(s) not found locally · Show`;
+    hint.addEventListener('click', () => {
+      showMissingRepos = !showMissingRepos;
+      renderRepoList();
+    });
+    repoListEl.appendChild(hint);
+  }
   updateBranchField();
 }
 
