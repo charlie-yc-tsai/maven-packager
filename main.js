@@ -26,7 +26,7 @@ function getCurrentJavaHome() {
   ];
   for (const cmd of queries) {
     try {
-      const out = execSync(cmd, { encoding: 'utf-8' });
+      const out = execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
       const match = out.match(/JAVA_HOME\s+REG_\w+\s+(.+)/);
       if (match) return match[1].trim();
     } catch {
@@ -336,6 +336,33 @@ ipcMain.handle('fetch-repo', (event, { repoId }) => {
       const success = code === 0;
       sender.send('fetch-done', { repoId, success });
       resolve(success ? { ok: true } : { ok: false, error: `git fetch exit code ${code}` });
+    });
+  });
+});
+
+// git pull 一樣用 spawn 邊跑邊串進度，跟 fetch-repo 共用同一套模式
+ipcMain.handle('pull-repo', (event, { repoId }) => {
+  const repo = loadRepoProfiles().find((r) => r.id === repoId);
+  const sender = event.sender;
+  if (!repo?.localPath) return Promise.resolve({ ok: false, error: 'Local path is not set yet' });
+  if (runningProcesses.has(repoId)) return Promise.resolve({ ok: false, error: 'This repo is running, stop it before pulling' });
+
+  return new Promise((resolve) => {
+    sender.send('pull-start', { repoId });
+    const proc = spawn('git', ['pull', '--ff-only', '--progress'], {
+      cwd: repo.localPath,
+      shell: true,
+    });
+    proc.stdout.on('data', (d) => sender.send('pull-log', { repoId, line: d.toString() }));
+    proc.stderr.on('data', (d) => sender.send('pull-log', { repoId, line: d.toString() }));
+    proc.on('error', (err) => {
+      sender.send('pull-done', { repoId, success: false, error: err.message });
+      resolve({ ok: false, error: `Failed to start git: ${err.message}` });
+    });
+    proc.on('close', (code) => {
+      const success = code === 0;
+      sender.send('pull-done', { repoId, success });
+      resolve(success ? { ok: true } : { ok: false, error: `git pull exit code ${code}` });
     });
   });
 });
