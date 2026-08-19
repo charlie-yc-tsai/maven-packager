@@ -9,6 +9,7 @@ const branchBarRepoNameEl = document.getElementById('branchBarRepoName');
 const branchInput = document.getElementById('branchInput');
 const branchListOptions = document.getElementById('branchListOptions');
 const fetchBranchBtn = document.getElementById('fetchBranchBtn');
+const pullBranchBtn = document.getElementById('pullBranchBtn');
 const autoFetchChk = document.getElementById('autoFetchChk');
 const refreshBranchBtn = document.getElementById('refreshBranchBtn');
 const switchBranchBtn = document.getElementById('switchBranchBtn');
@@ -240,6 +241,7 @@ async function loadBranchField(repoId) {
   switchBranchBtn.disabled = true;
   refreshBranchBtn.disabled = true;
   fetchBranchBtn.disabled = true;
+  pullBranchBtn.disabled = true;
   branchInput.value = '';
   branchInput.placeholder = 'Loading…';
   const res = await window.packagerAPI.listBranches(repoId);
@@ -257,6 +259,7 @@ async function loadBranchField(repoId) {
   branchInput.disabled = false;
   refreshBranchBtn.disabled = false;
   fetchBranchBtn.disabled = false;
+  pullBranchBtn.disabled = false;
   switchBranchBtn.disabled = false;
 }
 
@@ -273,6 +276,7 @@ async function fetchThenLoadBranches(repoId) {
   refreshBranchBtn.disabled = true;
   switchBranchBtn.disabled = true;
   fetchBranchBtn.disabled = true;
+  pullBranchBtn.disabled = true;
   branchInput.value = '';
   branchInput.placeholder = 'git fetch in progress…';
   const res = await window.packagerAPI.fetchRepo(repoId);
@@ -283,6 +287,7 @@ async function fetchThenLoadBranches(repoId) {
     branchInput.disabled = false;
     refreshBranchBtn.disabled = false;
     fetchBranchBtn.disabled = false;
+    pullBranchBtn.disabled = false;
     switchBranchBtn.disabled = false; // fetch 失敗但原本讀到的分支清單還在，照樣可切
     return;
   }
@@ -291,6 +296,25 @@ async function fetchThenLoadBranches(repoId) {
 
 fetchBranchBtn.addEventListener('click', () => {
   if (branchFieldRepoId) fetchThenLoadBranches(branchFieldRepoId);
+});
+
+// git pull：直接更新目前分支到最新，不用像 fetch 那樣還要再手動 switch
+async function pullThenLoadBranches(repoId) {
+  branchFieldRepoId = repoId;
+  branchInput.disabled = true;
+  refreshBranchBtn.disabled = true;
+  switchBranchBtn.disabled = true;
+  fetchBranchBtn.disabled = true;
+  pullBranchBtn.disabled = true;
+  const res = await window.packagerAPI.pullRepo(repoId);
+  if (branchFieldRepoId !== repoId) return; // pull 途中使用者換了勾選，結果作廢
+  if (!res.ok) showBanner(res.error);
+  else showBanner(`${repos.find((r) => r.id === repoId)?.displayName || repoId} git pull done`, 'info');
+  await loadBranchField(repoId); // 重讀分支列表跟目前分支狀態
+}
+
+pullBranchBtn.addEventListener('click', () => {
+  if (branchFieldRepoId) pullThenLoadBranches(branchFieldRepoId);
 });
 
 // ---------- 自動 fetch 開關（記在 localStorage，跟其他打包偏好分開存）----------
@@ -684,6 +708,21 @@ window.packagerAPI.onFetchDone(({ repoId, success, error }) => {
   const repo = repos.find((r) => r.id === repoId);
   appendLog(repoId, success ? '[git fetch done]' : `[git fetch failed] ${error || ''}`, !success);
   if (success) showBanner(`${repo ? repo.displayName : repoId} git fetch done`, 'info');
+});
+
+// pull 進度一樣借用 log tab，跟 fetch 共用同一套顯示邏輯
+window.packagerAPI.onPullStart(({ repoId }) => {
+  ensureTab(repoId, 'git pull --ff-only');
+  activateTab(repoId);
+  setStatus(repoId, 'running');
+});
+window.packagerAPI.onPullLog(({ repoId, line }) => {
+  ensureTab(repoId);
+  appendLog(repoId, line, false);
+});
+window.packagerAPI.onPullDone(({ repoId, success, error }) => {
+  setStatus(repoId, success ? 'success' : 'fail');
+  appendLog(repoId, success ? '[git pull done]' : `[git pull failed] ${error || ''}`, !success);
 });
 
 // ---------- 初始化 ----------

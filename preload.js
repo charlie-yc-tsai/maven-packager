@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('packagerAPI', {
   listBranches: (repoId) => ipcRenderer.invoke('list-branches', { repoId }),
   checkoutBranch: (repoId, branch) => ipcRenderer.invoke('checkout-branch', { repoId, branch }),
   fetchRepo: (repoId) => ipcRenderer.invoke('fetch-repo', { repoId }),
+  pullRepo: (repoId) => ipcRenderer.invoke('pull-repo', { repoId }),
   runPackage: (repoIds, profileId, installType, options) =>
     ipcRenderer.invoke('run-package', { repoIds, profileId, installType, ...options }),
   cancelPackage: (repoId) => ipcRenderer.invoke('cancel-package', { repoId }),
@@ -25,4 +26,8 @@ contextBridge.exposeInMainWorld('packagerAPI', {
   onFetchStart: (callback) => ipcRenderer.on('fetch-start', (_e, payload) => callback(payload)),
   onFetchLog: (callback) => ipcRenderer.on('fetch-log', (_e, payload) => callback(payload)),
   onFetchDone: (callback) => ipcRenderer.on('fetch-done', (_e, payload) => callback(payload)),
+
+  onPullStart: (callback) => ipcRenderer.on('pull-start', (_e, payload) => callback(payload)),
+  onPullLog: (callback) => ipcRenderer.on('pull-log', (_e, payload) => callback(payload)),
+  onPullDone: (callback) => ipcRenderer.on('pull-done', (_e, payload) => callback(payload)),
 });

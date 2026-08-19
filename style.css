@@ -433,6 +433,7 @@ select:disabled { color: var(--text-muted); }
   font-size: 14px;
 }
 .icon-btn:hover { background: var(--border); }
+.icon-btn.small-btn { width: auto; }
 
 .spacer { flex: 1; }
 
