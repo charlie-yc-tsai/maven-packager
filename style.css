@@ -124,6 +124,14 @@ html, body {
 }
 .link-btn:hover { text-decoration: underline; }
 
+.repo-missing-hint {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: var(--text-muted);
+  padding: 4px 6px;
+}
+
 .repo-list {
   flex: 1;
   min-height: 0;
