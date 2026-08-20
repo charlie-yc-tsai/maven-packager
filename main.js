@@ -466,7 +466,10 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
 
     // shell: true 是為了在 Windows 上正確解析 mvn.cmd；env 用即時查到的 JAVA_HOME 覆蓋，
     // 避免吃到 electron 啟動當下就凍結、可能過期的 process.env.JAVA_HOME
-    const proc = spawn('mvn', args, {
+    // cmd.exe 預設用系統代碼頁（zh-TW 是 MS950）輸出，Node 用 utf-8 解碼會亂碼，
+    // 先 chcp 65001 切成 UTF-8 讓兩邊編碼對上
+    const quotedArgs = args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ');
+    const proc = spawn(`chcp 65001>nul && mvn ${quotedArgs}`, {
       cwd: repo.localPath,
       shell: true,
       env: { ...process.env, JAVA_HOME: javaHome },
