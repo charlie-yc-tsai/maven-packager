@@ -269,6 +269,9 @@ async function loadBranchField(repoId) {
     fetchBranchBtn.disabled = false;
     return;
   }
+  // GitHub Desktop 目前選的是這個 repo 的 worktree 時，git/mvn 都在那個資料夾跑，標出來避免搞混
+  const repo = repos.find((r) => r.id === repoId);
+  branchBarRepoNameEl.textContent = (repo ? repo.displayName : repoId) + (res.isWorktree ? ` (worktree: ${res.workPath})` : '');
   branchFieldOptions = res.branches;
   branchListOptions.innerHTML = res.branches.map((b) => `<option value="${b}"></option>`).join('');
   branchInput.value = res.current;
