@@ -111,6 +111,68 @@ function loadRepoProfiles() {
   return repos.map((repo) => ({ ...repo, localPath: localPaths[repo.id] || null }));
 }
 
+// ---------- 跟隨 GitHub Desktop 目前選的 repo（可能是 worktree） ----------
+// ponytail: 直接 regex 掃 Desktop 的 leveldb 原始檔（localStorage 存選中 id、IndexedDB 存 id→path），
+// 壓縮過的 .ldb 掃不到就退回 repos.local.json 的路徑；Desktop 改儲存格式時這裡會失效
+const DESKTOP_DATA = path.join(process.env.APPDATA || '', 'GitHub Desktop');
+
+function readLevelDbFiles(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => /^\d+\.(log|ldb)$/.test(f))
+    .sort((a, b) => parseInt(a) - parseInt(b)) // 編號越大越新，最後找到的值就是最新的
+    .map((f) => fs.readFileSync(path.join(dir, f)).toString('latin1'));
+}
+
+function decodeVarint(bytes) {
+  let n = 0;
+  for (let i = 0; i < bytes.length; i++) n += (bytes.charCodeAt(i) & 0x7f) * 2 ** (7 * i);
+  return n;
+}
+
+function getDesktopSelectedPath() {
+  try {
+    let selectedId = null;
+    for (const s of readLevelDbFiles(path.join(DESKTOP_DATA, 'Local Storage', 'leveldb'))) {
+      for (const m of s.matchAll(/last-selected-repository-id[\x00-\x7f]\x01(\d+)/g)) selectedId = Number(m[1]);
+    }
+    if (selectedId === null) return null;
+
+    // IndexedDB 的 repository 紀錄是 V8 序列化：o"\x04path"<len><path>...."\x02idI<zigzag varint>
+    let found = null;
+    for (const s of readLevelDbFiles(path.join(DESKTOP_DATA, 'IndexedDB', 'file__0.indexeddb.leveldb'))) {
+      for (const m of s.matchAll(/o"\x04path"([\x80-\xff]*[\x00-\x7f])/g)) {
+        const len = decodeVarint(m[1]);
+        const start = m.index + m[0].length;
+        const repoPath = s.slice(start, start + len);
+        const idMatch = s.slice(start + len, start + len + 600).match(/"\x02idI([\x80-\xff]*[\x00-\x7f])/);
+        if (idMatch && decodeVarint(idMatch[1]) >> 1 === selectedId) found = repoPath;
+      }
+    }
+    return found;
+  } catch {
+    return null;
+  }
+}
+
+const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+
+// Desktop 選中的是這個 repo 的 worktree 就在那裡跑 git/mvn，否則用設定的 localPath
+function getWorkPath(repo) {
+  if (!repo.localPath) return null;
+  const selected = getDesktopSelectedPath();
+  if (!selected || samePath(selected, repo.localPath)) return repo.localPath;
+  try {
+    const gitFile = fs.readFileSync(path.join(selected, '.git'), 'utf-8'); // worktree 的 .git 是檔案
+    const gitDir = gitFile.match(/^gitdir:\s*(.+)$/m)?.[1].trim();
+    if (gitDir && samePath(path.dirname(gitDir), path.join(repo.localPath, '.git', 'worktrees'))) return selected;
+  } catch {
+    // 不是 worktree（或資料夾不存在）
+  }
+  return repo.localPath;
+}
+
 function loadLocalSettings() {
   if (!fs.existsSync(SETTINGS_LOCAL_PATH)) return {};
   return JSON.parse(fs.readFileSync(SETTINGS_LOCAL_PATH, 'utf-8'));
@@ -288,13 +350,14 @@ ipcMain.handle('list-branches', (event, { repoId }) => {
   try {
     const repo = loadRepoProfiles().find((r) => r.id === repoId);
     if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
+    const cwd = getWorkPath(repo);
     const local = execFileSync('git', ['branch', '--format=%(refname:short)'], {
-      cwd: repo.localPath,
+      cwd,
       encoding: 'utf-8',
     }).split('\n').map((s) => s.trim()).filter(Boolean);
     // 遠端分支：origin/xxx 去掉字首跟本機分支合併顯示，才選得到「本機還沒 checkout 過」的分支
     const remote = execFileSync('git', ['branch', '-r', '--format=%(refname:short)'], {
-      cwd: repo.localPath,
+      cwd,
       encoding: 'utf-8',
     })
       .split('\n')
@@ -303,10 +366,10 @@ ipcMain.handle('list-branches', (event, { repoId }) => {
       .map((s) => s.replace(/^origin\//, ''));
     const branches = [...new Set([...local, ...remote])];
     const current = execFileSync('git', ['branch', '--show-current'], {
-      cwd: repo.localPath,
+      cwd,
       encoding: 'utf-8',
     }).trim();
-    return { ok: true, branches, current };
+    return { ok: true, branches, current, workPath: cwd, isWorktree: cwd !== repo.localPath };
   } catch (err) {
     return { ok: false, error: `Failed to read branches: ${err.message}` };
   }
@@ -322,7 +385,7 @@ ipcMain.handle('fetch-repo', (event, { repoId }) => {
   return new Promise((resolve) => {
     sender.send('fetch-start', { repoId });
     const proc = spawn('git', ['fetch', '--all', '--prune', '--progress'], {
-      cwd: repo.localPath,
+      cwd: getWorkPath(repo),
       shell: true,
     });
     // git 的 --progress 輸出是寫到 stderr，不代表是錯誤
@@ -350,7 +413,7 @@ ipcMain.handle('pull-repo', (event, { repoId }) => {
   return new Promise((resolve) => {
     sender.send('pull-start', { repoId });
     const proc = spawn('git', ['pull', '--ff-only', '--progress'], {
-      cwd: repo.localPath,
+      cwd: getWorkPath(repo),
       shell: true,
     });
     proc.stdout.on('data', (d) => sender.send('pull-log', { repoId, line: d.toString() }));
@@ -373,7 +436,7 @@ ipcMain.handle('checkout-branch', (event, { repoId, branch }) => {
     if (runningProcesses.has(repoId)) return { ok: false, error: 'This repo is running, stop it before switching branches' };
     const repo = loadRepoProfiles().find((r) => r.id === repoId);
     if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
-    execFileSync('git', ['checkout', branch], { cwd: repo.localPath, encoding: 'utf-8' });
+    execFileSync('git', ['checkout', branch], { cwd: getWorkPath(repo), encoding: 'utf-8' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: `Failed to switch branch: ${err.message}` };
@@ -462,12 +525,13 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
     if (skipTests) args.push('-DskipTests');
     args.push(...extraArgList);
 
-    sender.send('build-start', { repoId: repo.id, command: `mvn ${args.join(' ')}` });
+    const cwd = getWorkPath(repo);
+    sender.send('build-start', { repoId: repo.id, command: `mvn ${args.join(' ')}  (in ${cwd})` });
 
     // shell: true 是為了在 Windows 上正確解析 mvn.cmd；env 用即時查到的 JAVA_HOME 覆蓋，
     // 避免吃到 electron 啟動當下就凍結、可能過期的 process.env.JAVA_HOME
     const proc = spawn('mvn', args, {
-      cwd: repo.localPath,
+      cwd,
       shell: true,
       env: { ...process.env, JAVA_HOME: javaHome },
     });
