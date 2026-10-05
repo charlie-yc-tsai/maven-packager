@@ -345,65 +345,21 @@ ipcMain.handle('set-repo-path', (event, { repoId, localPath }) => {
   }
 });
 
-// ---------- Git 分支切換 ----------
-ipcMain.handle('list-branches', (event, { repoId }) => {
+// ---------- Git 分支 ----------
+// 切換分支交給 GitHub Desktop，這裡只讀目前分支（跟 pull / mvn 用同一個資料夾）
+ipcMain.handle('get-current-branch', (event, { repoId }) => {
   try {
     const repo = loadRepoProfiles().find((r) => r.id === repoId);
     if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
     const cwd = getWorkPath(repo);
-    const local = execFileSync('git', ['branch', '--format=%(refname:short)'], {
-      cwd,
-      encoding: 'utf-8',
-    }).split('\n').map((s) => s.trim()).filter(Boolean);
-    // 遠端分支：origin/xxx 去掉字首跟本機分支合併顯示，才選得到「本機還沒 checkout 過」的分支
-    const remote = execFileSync('git', ['branch', '-r', '--format=%(refname:short)'], {
-      cwd,
-      encoding: 'utf-8',
-    })
-      .split('\n')
-      .map((s) => s.trim())
-      .filter((s) => s && !s.endsWith('/HEAD'))
-      .map((s) => s.replace(/^origin\//, ''));
-    const branches = [...new Set([...local, ...remote])];
-    const current = execFileSync('git', ['branch', '--show-current'], {
-      cwd,
-      encoding: 'utf-8',
-    }).trim();
-    return { ok: true, branches, current, workPath: cwd, isWorktree: cwd !== repo.localPath };
+    const current = execFileSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf-8' }).trim();
+    return { ok: true, current, workPath: cwd, isWorktree: cwd !== repo.localPath };
   } catch (err) {
-    return { ok: false, error: `Failed to read branches: ${err.message}` };
+    return { ok: false, error: `Failed to read branch: ${err.message}` };
   }
 });
 
-// git fetch 用 spawn（而非 execFileSync）才能邊跑邊把 --progress 輸出串給前端，
-// 讓使用者看得到「正在抓」而不是整個 UI 卡住等一個看不到進度的 IPC
-ipcMain.handle('fetch-repo', (event, { repoId }) => {
-  const repo = loadRepoProfiles().find((r) => r.id === repoId);
-  const sender = event.sender;
-  if (!repo?.localPath) return Promise.resolve({ ok: false, error: 'Local path is not set yet' });
-
-  return new Promise((resolve) => {
-    sender.send('fetch-start', { repoId });
-    const proc = spawn('git', ['fetch', '--all', '--prune', '--progress'], {
-      cwd: getWorkPath(repo),
-      shell: true,
-    });
-    // git 的 --progress 輸出是寫到 stderr，不代表是錯誤
-    proc.stdout.on('data', (d) => sender.send('fetch-log', { repoId, line: d.toString() }));
-    proc.stderr.on('data', (d) => sender.send('fetch-log', { repoId, line: d.toString() }));
-    proc.on('error', (err) => {
-      sender.send('fetch-done', { repoId, success: false, error: err.message });
-      resolve({ ok: false, error: `Failed to start git: ${err.message}` });
-    });
-    proc.on('close', (code) => {
-      const success = code === 0;
-      sender.send('fetch-done', { repoId, success });
-      resolve(success ? { ok: true } : { ok: false, error: `git fetch exit code ${code}` });
-    });
-  });
-});
-
-// git pull 一樣用 spawn 邊跑邊串進度，跟 fetch-repo 共用同一套模式
+// git pull 一樣用 spawn 邊跑邊串進度，邊跑邊串進度
 ipcMain.handle('pull-repo', (event, { repoId }) => {
   const repo = loadRepoProfiles().find((r) => r.id === repoId);
   const sender = event.sender;
@@ -428,19 +384,6 @@ ipcMain.handle('pull-repo', (event, { repoId }) => {
       resolve(success ? { ok: true } : { ok: false, error: `git pull exit code ${code}` });
     });
   });
-});
-
-ipcMain.handle('checkout-branch', (event, { repoId, branch }) => {
-  try {
-    if (!branch?.trim()) return { ok: false, error: 'Branch name is required' };
-    if (runningProcesses.has(repoId)) return { ok: false, error: 'This repo is running, stop it before switching branches' };
-    const repo = loadRepoProfiles().find((r) => r.id === repoId);
-    if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
-    execFileSync('git', ['checkout', branch], { cwd: getWorkPath(repo), encoding: 'utf-8' });
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: `Failed to switch branch: ${err.message}` };
-  }
 });
 
 // ---------- 動態解析 Maven settings.xml 的 profile id ----------

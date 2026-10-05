@@ -11,9 +11,7 @@ contextBridge.exposeInMainWorld('packagerAPI', {
   autoDetectPaths: () => ipcRenderer.invoke('auto-detect-paths'),
   listEnvironments: () => ipcRenderer.invoke('list-environments'),
   listJavaHomes: () => ipcRenderer.invoke('list-java-homes'),
-  listBranches: (repoId) => ipcRenderer.invoke('list-branches', { repoId }),
-  checkoutBranch: (repoId, branch) => ipcRenderer.invoke('checkout-branch', { repoId, branch }),
-  fetchRepo: (repoId) => ipcRenderer.invoke('fetch-repo', { repoId }),
+  getCurrentBranch: (repoId) => ipcRenderer.invoke('get-current-branch', { repoId }),
   pullRepo: (repoId) => ipcRenderer.invoke('pull-repo', { repoId }),
   runPackage: (repoIds, profileId, installType, options) =>
     ipcRenderer.invoke('run-package', { repoIds, profileId, installType, ...options }),
@@ -22,10 +20,6 @@ contextBridge.exposeInMainWorld('packagerAPI', {
   onBuildStart: (callback) => ipcRenderer.on('build-start', (_e, payload) => callback(payload)),
   onBuildLog: (callback) => ipcRenderer.on('build-log', (_e, payload) => callback(payload)),
   onBuildDone: (callback) => ipcRenderer.on('build-done', (_e, payload) => callback(payload)),
-
-  onFetchStart: (callback) => ipcRenderer.on('fetch-start', (_e, payload) => callback(payload)),
-  onFetchLog: (callback) => ipcRenderer.on('fetch-log', (_e, payload) => callback(payload)),
-  onFetchDone: (callback) => ipcRenderer.on('fetch-done', (_e, payload) => callback(payload)),
 
   onPullStart: (callback) => ipcRenderer.on('pull-start', (_e, payload) => callback(payload)),
   onPullLog: (callback) => ipcRenderer.on('pull-log', (_e, payload) => callback(payload)),

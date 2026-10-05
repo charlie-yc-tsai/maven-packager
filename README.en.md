@@ -3,7 +3,7 @@
 An Electron app for packaging multiple repos with one click. Check repos, pick an environment and
 an install type, then run `mvn clean install` on all of them in parallel. Each repo gets its own
 log tab with live output, and you can stop/restart individually or all at once. Also has built-in
-Git branch switching / fetch, so you don't have to drop into a terminal.
+Git pull that follows the repo/worktree selected in GitHub Desktop, so you don't have to drop into a terminal.
 
 > This is the English translation. The original (Traditional Chinese) doc is
 > [README.md](README.md).
@@ -82,24 +82,18 @@ profiles exist and which module defines them — most projects need Bundle insta
 Environment, install type, skip-tests, and extra-args selections are remembered in the browser's
 `localStorage`, so they persist across app restarts.
 
-### Git branch switching
+### Git branch and worktrees
 
 When **exactly one** repo is checked on the left, a "Git branch" bar surfaces below the toolbar
-(it stays hidden for zero or multiple selections — this is a per-repo action, kept visually
-separate from the build settings above):
+(hidden for zero or multiple selections):
 
-- The branch field auto-loads the repo's current branch and lists both local and remote branches
-  (remote entries have the `origin/` prefix stripped); typing filters the list via the browser's
-  native autocomplete.
-- Click "Switch" to `git checkout` the typed branch. If it only exists on the remote, git
-  auto-creates a local tracking branch.
-- Click "⇣" to run `git fetch --all --prune`. Progress streams live into a log tab (which auto-
-  activates), and a banner confirms completion (auto-dismisses after 4s).
-- Checking "Auto-fetch on select" makes every repo selection on the left trigger a fetch before
-  loading branches, so you don't need to click ⇣ manually (the preference is remembered in
-  `localStorage`; off by default).
-- Branch switching is blocked while that repo is currently packaging (enforced in both the IPC
-  layer and the UI).
+- It shows the current branch read-only. **Switch branches in GitHub Desktop**; there is no checkout here.
+- git / mvn run in the folder currently selected in GitHub Desktop: if that is a worktree of the repo,
+  the worktree is used (its path is shown in the bar and the build log); otherwise the path from
+  `repos.local.json`. If Desktop's data can't be read, the configured path is used.
+- After changing the selection in Desktop, click "⟳" to reload.
+- Click "⇩" to run `git pull --ff-only`. Progress streams live into a log tab.
+- Pull is blocked while that repo is currently packaging.
 
 ## Building a standalone exe
 
@@ -126,10 +120,8 @@ fails due to missing symlink permissions.
   `main.js`.
 - On Windows, `spawn('mvn', ...)` uses `shell: true` to resolve `mvn.cmd`; stopping a process uses
   `taskkill /T /F` so child processes under `mvn.cmd` get killed too.
-- **`git fetch` uses `spawn` instead of a blocking exec** so `--progress` output can stream to the
-  UI live, instead of the whole interface freezing on an IPC call with no visible progress. The
-  branch list merges `git branch` and `git branch -r` so remote branches not yet checked out
-  locally still show up.
+- **`git pull` uses `spawn` instead of a blocking exec** so `--progress` output can stream to the
+  UI live, instead of the whole interface freezing on an IPC call with no visible progress.
 
 ## Known limitations
 
@@ -140,7 +132,7 @@ fails due to missing symlink permissions.
 - Restarting a "done" repo reuses the same log tab (clearing old output first), but if you try to
   restart while it's still running, the button is disabled, so you can't end up with two processes
   racing on the same repo.
-- Git branch switching only works against a single checked repo at a time; the branch bar stays
-  hidden when multiple repos are checked. If the target branch has uncommitted changes blocking
-  `git checkout`, the tool just surfaces git's own error message — it doesn't force the switch or
-  auto-stash.
+- The branch bar only works against a single checked repo at a time (hidden otherwise). Following
+  GitHub Desktop reads its local storage files; if Desktop changes the format, detection stops and
+  the configured path is used. Desktop selects one worktree at a time, so worktrees of different
+  repos cannot be detected simultaneously.
