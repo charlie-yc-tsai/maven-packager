@@ -7,12 +7,8 @@ const copyJavaPathBtn = document.getElementById('copyJavaPathBtn');
 const branchBarEl = document.getElementById('branchBar');
 const branchBarRepoNameEl = document.getElementById('branchBarRepoName');
 const branchInput = document.getElementById('branchInput');
-const branchListOptions = document.getElementById('branchListOptions');
-const fetchBranchBtn = document.getElementById('fetchBranchBtn');
 const pullBranchBtn = document.getElementById('pullBranchBtn');
-const autoFetchChk = document.getElementById('autoFetchChk');
 const refreshBranchBtn = document.getElementById('refreshBranchBtn');
-const switchBranchBtn = document.getElementById('switchBranchBtn');
 const selectAllBtn = document.getElementById('selectAllBtn');
 const runBtn = document.getElementById('runBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -231,13 +227,11 @@ function renderRepoList() {
 // ---------- Git 分支 ----------
 // 這是獨立的 contextual bar：只在左側「剛好勾一個 repo」時浮出來，
 // 跟上面「怎麼打包」的 toolbar 是兩件事，不擠在同一排搶對齊
-// branchInput 搭配 <datalist> 用瀏覽器原生的輸入時篩選/搜尋，不用另外寫下拉元件
+// 分支欄位只顯示目前分支（換分支請在 GitHub Desktop 做），只留 pull 跟重新整理
 let branchFieldRepoId = null;
-let branchFieldOptions = [];
 
 function resetBranchField() {
   branchFieldRepoId = null;
-  branchFieldOptions = [];
   branchBarEl.classList.add('hidden');
 }
 
@@ -247,123 +241,43 @@ function updateBranchField() {
   branchBarEl.classList.remove('hidden');
   const repo = repos.find((r) => r.id === ids[0]);
   branchBarRepoNameEl.textContent = repo ? repo.displayName : ids[0];
-  if (ids[0] === branchFieldRepoId) return; // 已經是這個 repo，不用重讀
-  if (autoFetchChk.checked) fetchThenLoadBranches(ids[0]);
-  else loadBranchField(ids[0]);
+  if (ids[0] !== branchFieldRepoId) loadBranchField(ids[0]); // 已經是這個 repo 就不用重讀
 }
 
 async function loadBranchField(repoId) {
   branchFieldRepoId = repoId;
-  branchInput.disabled = true;
-  switchBranchBtn.disabled = true;
   refreshBranchBtn.disabled = true;
-  fetchBranchBtn.disabled = true;
   pullBranchBtn.disabled = true;
   branchInput.value = '';
   branchInput.placeholder = 'Loading…';
-  const res = await window.packagerAPI.listBranches(repoId);
+  const res = await window.packagerAPI.getCurrentBranch(repoId);
   if (branchFieldRepoId !== repoId) return; // 讀取途中使用者換了勾選，結果作廢
+  refreshBranchBtn.disabled = false;
   if (!res.ok) {
     branchInput.placeholder = res.error;
-    refreshBranchBtn.disabled = false;
-    fetchBranchBtn.disabled = false;
     return;
   }
   // GitHub Desktop 目前選的是這個 repo 的 worktree 時，git/mvn 都在那個資料夾跑，標出來避免搞混
   const repo = repos.find((r) => r.id === repoId);
   branchBarRepoNameEl.textContent = (repo ? repo.displayName : repoId) + (res.isWorktree ? ` (worktree: ${res.workPath})` : '');
-  branchFieldOptions = res.branches;
-  branchListOptions.innerHTML = res.branches.map((b) => `<option value="${b}"></option>`).join('');
-  branchInput.value = res.current;
-  branchInput.placeholder = 'Search branches…';
-  branchInput.disabled = false;
-  refreshBranchBtn.disabled = false;
-  fetchBranchBtn.disabled = false;
+  branchInput.value = res.current || '(detached HEAD)';
   pullBranchBtn.disabled = false;
-  switchBranchBtn.disabled = false;
 }
 
 refreshBranchBtn.addEventListener('click', () => {
   if (branchFieldRepoId) loadBranchField(branchFieldRepoId);
 });
-branchInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') switchBranchBtn.click();
-});
 
-async function fetchThenLoadBranches(repoId) {
-  branchFieldRepoId = repoId;
-  branchInput.disabled = true;
+// git pull：把目前分支更新到最新
+pullBranchBtn.addEventListener('click', async () => {
+  const repoId = branchFieldRepoId;
+  if (!repoId) return;
   refreshBranchBtn.disabled = true;
-  switchBranchBtn.disabled = true;
-  fetchBranchBtn.disabled = true;
-  pullBranchBtn.disabled = true;
-  branchInput.value = '';
-  branchInput.placeholder = 'git fetch in progress…';
-  const res = await window.packagerAPI.fetchRepo(repoId);
-  if (branchFieldRepoId !== repoId) return; // fetch 途中使用者換了勾選，結果作廢
-  if (!res.ok) {
-    showBanner(res.error);
-    branchInput.placeholder = 'Search branches…';
-    branchInput.disabled = false;
-    refreshBranchBtn.disabled = false;
-    fetchBranchBtn.disabled = false;
-    pullBranchBtn.disabled = false;
-    switchBranchBtn.disabled = false; // fetch 失敗但原本讀到的分支清單還在，照樣可切
-    return;
-  }
-  await loadBranchField(repoId); // 重讀分支列表，撈到 fetch 後新出現的遠端分支
-}
-
-fetchBranchBtn.addEventListener('click', () => {
-  if (branchFieldRepoId) fetchThenLoadBranches(branchFieldRepoId);
-});
-
-// git pull：直接更新目前分支到最新，不用像 fetch 那樣還要再手動 switch
-async function pullThenLoadBranches(repoId) {
-  branchFieldRepoId = repoId;
-  branchInput.disabled = true;
-  refreshBranchBtn.disabled = true;
-  switchBranchBtn.disabled = true;
-  fetchBranchBtn.disabled = true;
   pullBranchBtn.disabled = true;
   const res = await window.packagerAPI.pullRepo(repoId);
   if (branchFieldRepoId !== repoId) return; // pull 途中使用者換了勾選，結果作廢
   if (!res.ok) showBanner(res.error);
   else showBanner(`${repos.find((r) => r.id === repoId)?.displayName || repoId} git pull done`, 'info');
-  await loadBranchField(repoId); // 重讀分支列表跟目前分支狀態
-}
-
-pullBranchBtn.addEventListener('click', () => {
-  if (branchFieldRepoId) pullThenLoadBranches(branchFieldRepoId);
-});
-
-// ---------- 自動 fetch 開關（記在 localStorage，跟其他打包偏好分開存）----------
-const AUTO_FETCH_KEY = 'aemPackagerAutoFetch';
-autoFetchChk.checked = localStorage.getItem(AUTO_FETCH_KEY) === '1';
-autoFetchChk.addEventListener('change', () => {
-  localStorage.setItem(AUTO_FETCH_KEY, autoFetchChk.checked ? '1' : '0');
-});
-
-switchBranchBtn.addEventListener('click', async () => {
-  const repoId = branchFieldRepoId;
-  const branch = branchInput.value.trim();
-  if (!repoId || !branch) return;
-  if (!branchFieldOptions.includes(branch)) {
-    showBanner(`Branch not found: "${branch}"`);
-    return;
-  }
-  if (runningRepoIds.has(repoId)) {
-    showBanner('This repo is running, stop it before switching branches');
-    return;
-  }
-  const repo = repos.find((r) => r.id === repoId);
-  switchBranchBtn.disabled = true;
-  const res = await window.packagerAPI.checkoutBranch(repoId, branch);
-  if (!res.ok) {
-    showBanner(res.error);
-  } else {
-    showBanner(`${repo.displayName} switched to ${branch}`, 'info');
-  }
   loadBranchField(repoId);
 });
 
@@ -712,25 +626,8 @@ window.packagerAPI.onBuildDone(({ repoId, success, error }) => {
   if (error) appendLog(repoId, `[Error] ${error}`, true);
 });
 
-// fetch 進度借用同一套 log tab 顯示，跟 mvn build 共用分頁但不算進 runningRepoIds
-// （fetch 不是「打包中」，不用擋 run/stop 按鈕，只是借地方讓使用者看到抓取進度）
-window.packagerAPI.onFetchStart(({ repoId }) => {
-  ensureTab(repoId, 'git fetch --all --prune');
-  activateTab(repoId); // 使用者剛按了 fetch，直接切過去，不然分頁躲在背後看不到進度
-  setStatus(repoId, 'running');
-});
-window.packagerAPI.onFetchLog(({ repoId, line }) => {
-  ensureTab(repoId);
-  appendLog(repoId, line, false);
-});
-window.packagerAPI.onFetchDone(({ repoId, success, error }) => {
-  setStatus(repoId, success ? 'success' : 'fail');
-  const repo = repos.find((r) => r.id === repoId);
-  appendLog(repoId, success ? '[git fetch done]' : `[git fetch failed] ${error || ''}`, !success);
-  if (success) showBanner(`${repo ? repo.displayName : repoId} git fetch done`, 'info');
-});
-
-// pull 進度一樣借用 log tab，跟 fetch 共用同一套顯示邏輯
+// pull 進度借用同一套 log tab 顯示，跟 mvn build 共用分頁但不算進 runningRepoIds
+// （pull 不是「打包中」，不用擋 run/stop 按鈕，只是借地方讓使用者看到進度）
 window.packagerAPI.onPullStart(({ repoId }) => {
   ensureTab(repoId, 'git pull --ff-only');
   activateTab(repoId);

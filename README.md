@@ -2,7 +2,7 @@
 
 跨 repo 一鍵打包工具（Electron app）。勾選 repo、選環境、選安裝方式，一鍵平行執行
 `mvn clean install`，每個 repo 各自一個 log 分頁即時看輸出，可單獨/整批停止、重新開始。
-另外內建 Git 分支切換／fetch，不用切去終端機操作。
+另外內建 Git pull，並自動跟著 GitHub Desktop 目前選的 repo／worktree，不用切去終端機操作。
 
 > 介面文字為英文，本文件括號附上實際按鈕/欄位標籤方便對照。若要看英文版說明文件，見
 > [README.en.md](README.en.md)。
@@ -67,19 +67,16 @@ App 啟動時會自動合併 `repos.json` + `repos.local.json`；缺路徑的 re
 
 環境、安裝方式、跳過測試、額外參數這些選擇會記在瀏覽器 `localStorage`，重開 app 不會消失。
 
-### Git 分支切換
+### Git 分支與 worktree
 
-左側**剛好勾選一個** repo 時，工具列下方會浮出一條「Git branch」bar（勾 0 個或多個都不會顯示，這是
-針對單一 repo 的動作，跟上面的打包設定分開）：
+左側**剛好勾選一個** repo 時，工具列下方會浮出一條「Git branch」bar（勾 0 個或多個都不會顯示）：
 
-- 分支輸入框會自動載入該 repo 目前的分支，並列出本機分支＋遠端分支（`origin/xxx` 已去掉字首），輸入文字
-  可用瀏覽器原生自動完成搜尋。
-- 按「切換 Switch」用 `git checkout` 切過去；若打的名字只有遠端有、本機沒有，git 會自動建立追蹤分支。
-- 按「⇣」執行 `git fetch --all --prune`，過程會借用 log 分頁即時顯示 `--progress` 輸出，並自動切到那個
-  分頁；完成會跳出頂部提示（4 秒後自動收掉）。
-- 勾選「Auto-fetch on select」後，左側每次勾選 repo 都會自動先 fetch 再列分支，不用手動按 ⇣（狀態記在
-  `localStorage`，預設不勾）。
-- 該 repo 正在打包中時，不能切換分支（IPC 層跟 UI 層都有擋）。
+- 唯讀顯示目前分支。**切換分支請在 GitHub Desktop 做**，這裡不提供 checkout。
+- git／mvn 預設在 GitHub Desktop 目前選的資料夾執行：如果它是該 repo 的 worktree，就用那個 worktree，
+  並在 bar 與 build log 標出實際路徑；否則用 `repos.local.json` 設定的路徑。讀不到 Desktop 資料時也退回設定路徑。
+- 在 Desktop 換選之後，按「⟳」重新讀取。
+- 按「⇩」執行 `git pull --ff-only`，過程借用 log 分頁即時顯示 `--progress` 輸出。
+- 該 repo 正在打包中時，不能 pull。
 
 ## 打包成單一 exe 發佈
 
@@ -101,8 +98,8 @@ Windows 需要開啟「開發人員模式」（設定 → 隱私權與安全性 
   在 `main.js` 補拓撲排序邏輯。
 - Windows 上 `spawn('mvn', ...)` 用 `shell: true` 解析 `mvn.cmd`；停止行程用 `taskkill /T /F` 才能連
   `mvn.cmd` 底下的子行程一起砍掉。
-- **git fetch 用 `spawn` 而非同步 exec**：邊跑邊把 `--progress` 輸出串給前端，避免整個 UI 卡住等一個看不到
-  進度的 IPC；分支列表則合併 `git branch` 跟 `git branch -r`，才選得到本機還沒 checkout 過的遠端分支。
+- **git pull 用 `spawn` 而非同步 exec**：邊跑邊把 `--progress` 輸出串給前端，避免整個 UI 卡住等一個看不到
+  進度的 IPC。
 
 ## 已知限制
 
@@ -111,5 +108,6 @@ Windows 需要開啟「開發人員模式」（設定 → 隱私權與安全性 
 - 沒有「暫停/繼續」，`■ 停止` 是直接 kill 整個行程樹。
 - 重新執行一個「已完成」的 repo 會沿用同一個 log 分頁（清空舊 log），但如果是在它還在跑的時候點重新開始，
   按鈕會被停用擋掉，不會出現兩個行程搶同一個 repo 的狀況。
-- Git 分支切換一次只能對單一勾選的 repo 操作；勾多個 repo 時分支 bar 不會顯示。若目標分支有未提交的變更
-  擋住 `git checkout`，會直接顯示 git 原生的錯誤訊息，工具本身不做額外處理（例如強制切換或自動 stash）。
+- Git 分支 bar 一次只能對單一勾選的 repo 操作；勾多個 repo 時不會顯示。跟隨 GitHub Desktop 的偵測是讀它的本機
+  儲存檔，Desktop 改格式時會失效並退回設定路徑；Desktop 同一時間只選一個 worktree，所以不同 repo 的 worktree
+  無法同時被偵測。

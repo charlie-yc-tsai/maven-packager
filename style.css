@@ -368,12 +368,6 @@ html, body {
 }
 .branch-bar-input:disabled { color: var(--text-muted); }
 
-.branch-bar-autofetch {
-  color: var(--text-muted);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
 /* ---------- Main ---------- */
 .main {
   flex: 1;
@@ -393,8 +387,6 @@ html, body {
 
 .toolbar-row {
   display: flex;
-  /* flex-start，不用 flex-end：Git 分支欄位下面多了「自動 fetch」checkbox，比其他欄位高，
-     用 flex-end 對齊底部會讓其他欄位的輸入框跟著往下掉、跟 Git 分支欄位的輸入框對不齊 */
   align-items: flex-start;
   gap: 20px;
   flex-wrap: wrap;

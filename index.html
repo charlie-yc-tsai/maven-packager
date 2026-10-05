@@ -123,26 +123,9 @@
 
       <div id="branchBar" class="branch-bar hidden">
         <span class="branch-bar-label">Git branch · <strong id="branchBarRepoName"></strong></span>
-        <input
-          id="branchInput"
-          class="branch-bar-input"
-          list="branchListOptions"
-          placeholder="Search branches…"
-          autocomplete="off"
-          disabled
-        />
-        <datalist id="branchListOptions"></datalist>
-        <button id="fetchBranchBtn" class="icon-btn" title="git fetch (pull latest remote branches)" disabled>⇣</button>
+        <input id="branchInput" class="branch-bar-input" readonly disabled />
         <button id="pullBranchBtn" class="icon-btn" title="git pull --ff-only (update current branch to latest)" disabled>⇩</button>
-        <button id="refreshBranchBtn" class="icon-btn" title="Reload branches" disabled>⟳</button>
-        <button id="switchBranchBtn" class="primary-btn small-btn" title="Switch branch" disabled>Switch</button>
-        <label
-          class="checkbox-label branch-bar-autofetch"
-          title="Auto git fetch when a repo is checked on the left, no need to click ⇣ manually"
-        >
-          <input type="checkbox" id="autoFetchChk" />
-          Auto-fetch on select
-        </label>
+        <button id="refreshBranchBtn" class="icon-btn" title="Reload current branch (after switching in GitHub Desktop)" disabled>⟳</button>
       </div>
 
       <div id="banner" class="banner hidden">
