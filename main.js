@@ -16,6 +16,8 @@ const MAVEN_SETTINGS_PATH = path.join(os.homedir(), '.m2', 'settings.xml');
 let mainWindow;
 // repoId -> ChildProcess，用來支援「取消執行」
 const runningProcesses = new Map();
+// 正在 git pull 的 repoId；pull 跟 mvn 用同一個資料夾，不能同時跑
+const pullingRepoIds = new Set();
 
 // electron 啟動時就凍結一份 process.env，之後使用者改了 JAVA_HOME 不會反映進來，
 // 所以每次執行都直接向 Windows 登錄檔問目前實際值
@@ -89,6 +91,8 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 }
 
+// Windows 要有 AppUserModelId，renderer 的 new Notification() 才會跳出系統通知
+app.setAppUserModelId('com.benq.maven-packager');
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
@@ -359,12 +363,14 @@ ipcMain.handle('get-current-branch', (event, { repoId }) => {
   }
 });
 
-// git pull 一樣用 spawn 邊跑邊串進度，邊跑邊串進度
+// git pull 用 spawn 邊跑邊把 --progress 輸出串給前端
 ipcMain.handle('pull-repo', (event, { repoId }) => {
   const repo = loadRepoProfiles().find((r) => r.id === repoId);
   const sender = event.sender;
   if (!repo?.localPath) return Promise.resolve({ ok: false, error: 'Local path is not set yet' });
   if (runningProcesses.has(repoId)) return Promise.resolve({ ok: false, error: 'This repo is running, stop it before pulling' });
+  if (pullingRepoIds.has(repoId)) return Promise.resolve({ ok: false, error: 'git pull is already running for this repo' });
+  pullingRepoIds.add(repoId);
 
   return new Promise((resolve) => {
     sender.send('pull-start', { repoId });
@@ -375,10 +381,12 @@ ipcMain.handle('pull-repo', (event, { repoId }) => {
     proc.stdout.on('data', (d) => sender.send('pull-log', { repoId, line: d.toString() }));
     proc.stderr.on('data', (d) => sender.send('pull-log', { repoId, line: d.toString() }));
     proc.on('error', (err) => {
+      pullingRepoIds.delete(repoId);
       sender.send('pull-done', { repoId, success: false, error: err.message });
       resolve({ ok: false, error: `Failed to start git: ${err.message}` });
     });
     proc.on('close', (code) => {
+      pullingRepoIds.delete(repoId);
       const success = code === 0;
       sender.send('pull-done', { repoId, success });
       resolve(success ? { ok: true } : { ok: false, error: `git pull exit code ${code}` });
@@ -440,6 +448,13 @@ function runMavenProcess(repo, profileId, installType, skipTests, extraArgList, 
   return new Promise((resolve, reject) => {
     if (!repo.localPath || !fs.existsSync(repo.localPath)) {
       const msg = repo.localPath ? `Path does not exist: ${repo.localPath}` : 'Local path is not set for this repo yet';
+      sender.send('build-log', { repoId: repo.id, line: msg, isError: true });
+      sender.send('build-done', { repoId: repo.id, success: false, error: msg });
+      return reject(new Error(msg));
+    }
+
+    if (pullingRepoIds.has(repo.id)) {
+      const msg = 'git pull is running for this repo, wait for it to finish';
       sender.send('build-log', { repoId: repo.id, line: msg, isError: true });
       sender.send('build-done', { repoId: repo.id, success: false, error: msg });
       return reject(new Error(msg));

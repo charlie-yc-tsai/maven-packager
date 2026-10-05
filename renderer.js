@@ -38,6 +38,8 @@ let repos = [];
 let activeTabId = null;
 let editingRepoId = null;
 const runningRepoIds = new Set();
+// pull 跟 mvn 用同一個資料夾，pull 中的 repo 不能開始打包，打包中的也不能 pull
+const pullingRepoIds = new Set();
 
 // ---------- 打包設定記憶（環境、安裝方式、跳過測試、額外參數） ----------
 // 存 localStorage，重開 app 後沿用上次的選擇
@@ -229,6 +231,12 @@ function renderRepoList() {
 // 跟上面「怎麼打包」的 toolbar 是兩件事，不擠在同一排搶對齊
 // 分支欄位只顯示目前分支（換分支請在 GitHub Desktop 做），只留 pull 跟重新整理
 let branchFieldRepoId = null;
+let branchFieldReady = false; // 目前分支讀取成功才給 pull
+
+function syncPullBtn() {
+  const id = branchFieldRepoId;
+  pullBranchBtn.disabled = !branchFieldReady || runningRepoIds.has(id) || pullingRepoIds.has(id);
+}
 
 function resetBranchField() {
   branchFieldRepoId = null;
@@ -246,8 +254,9 @@ function updateBranchField() {
 
 async function loadBranchField(repoId) {
   branchFieldRepoId = repoId;
+  branchFieldReady = false;
   refreshBranchBtn.disabled = true;
-  pullBranchBtn.disabled = true;
+  syncPullBtn();
   branchInput.value = '';
   branchInput.placeholder = 'Loading…';
   const res = await window.packagerAPI.getCurrentBranch(repoId);
@@ -261,20 +270,30 @@ async function loadBranchField(repoId) {
   const repo = repos.find((r) => r.id === repoId);
   branchBarRepoNameEl.textContent = (repo ? repo.displayName : repoId) + (res.isWorktree ? ` (worktree: ${res.workPath})` : '');
   branchInput.value = res.current || '(detached HEAD)';
-  pullBranchBtn.disabled = false;
+  branchFieldReady = true;
+  syncPullBtn();
 }
 
 refreshBranchBtn.addEventListener('click', () => {
   if (branchFieldRepoId) loadBranchField(branchFieldRepoId);
 });
 
+// 從 GitHub Desktop 切回來（可能換了 repo/worktree/分支）就自動重讀，畫面才不會顯示過期的分支
+window.addEventListener('focus', () => {
+  if (branchFieldRepoId && !pullingRepoIds.has(branchFieldRepoId)) loadBranchField(branchFieldRepoId);
+});
+
 // git pull：把目前分支更新到最新
 pullBranchBtn.addEventListener('click', async () => {
   const repoId = branchFieldRepoId;
-  if (!repoId) return;
+  if (!repoId || runningRepoIds.has(repoId) || pullingRepoIds.has(repoId)) return;
+  pullingRepoIds.add(repoId);
+  syncTabButtons(repoId);
   refreshBranchBtn.disabled = true;
-  pullBranchBtn.disabled = true;
+  syncPullBtn();
   const res = await window.packagerAPI.pullRepo(repoId);
+  pullingRepoIds.delete(repoId);
+  syncTabButtons(repoId);
   if (branchFieldRepoId !== repoId) return; // pull 途中使用者換了勾選，結果作廢
   if (!res.ok) showBanner(res.error);
   else showBanner(`${repos.find((r) => r.id === repoId)?.displayName || repoId} git pull done`, 'info');
@@ -530,23 +549,25 @@ function ensureTab(repoId, command) {
   `;
   logPanelsEl.appendChild(panel);
 
-  setTabRunning(repoId, runningRepoIds.has(repoId));
+  syncTabButtons(repoId);
   if (runningRepoIds.has(repoId)) setStatus(repoId, 'running');
   if (!activeTabId) activateTab(repoId);
 }
 
-function setTabRunning(repoId, running) {
+function syncTabButtons(repoId) {
   const tab = document.getElementById(`tab-${repoId}`);
   if (!tab) return;
-  tab.querySelector('.tab-start').disabled = running;
+  const running = runningRepoIds.has(repoId);
+  const busy = running || pullingRepoIds.has(repoId);
+  tab.querySelector('.tab-start').disabled = busy;
   tab.querySelector('.tab-stop').disabled = !running;
-  // 跑的時候不給關，不然 build-log/build-done 事件晚點到會把分頁重新生出來
-  tab.querySelector('.tab-close').disabled = running;
+  // 跑的時候不給關，不然 log/done 事件晚點到會把分頁重新生出來
+  tab.querySelector('.tab-close').disabled = busy;
 }
 
-// 關掉分頁：跑中的不能關（setTabRunning 已擋掉點擊），關掉後如果原本是 active tab 就切去旁邊那個
+// 關掉分頁：跑中或 pull 中的不能關（syncTabButtons 已擋掉點擊），關掉後如果原本是 active tab 就切去旁邊那個
 function closeTab(repoId) {
-  if (runningRepoIds.has(repoId)) return;
+  if (runningRepoIds.has(repoId) || pullingRepoIds.has(repoId)) return;
   document.getElementById(`tab-${repoId}`)?.remove();
   document.getElementById(`panel-${repoId}`)?.remove();
   if (activeTabId === repoId) {
@@ -575,27 +596,36 @@ function appendLog(repoId, line, isError) {
     : '';
   div.className = 'log-line' + (level ? ` ${level}` : '');
   div.textContent = line;
+  // 使用者往上捲在看前面的 log 時不要硬拉回底部，原本就在底部才跟著捲
+  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
   body.appendChild(div);
-  body.scrollTop = body.scrollHeight;
+  if (atBottom) body.scrollTop = body.scrollHeight;
 }
 
 // ---------- 執行打包 ----------
 // 共用邏輯：分頁上的 ▶ 跟側邊欄的「開始打包」都走這裡，
 // 讓已經在跑的 repo 可以跳過，也讓單一 repo 可以獨立重新開始
+// 一批打包（從閒置到全部跑完）的結果，全部結束時彙整成一則通知
+const batchResults = new Map();
+
 async function startRepos(repoIds) {
-  const toStart = repoIds.filter((id) => !runningRepoIds.has(id));
+  const pulling = repoIds.filter((id) => pullingRepoIds.has(id));
+  const toStart = repoIds.filter((id) => !runningRepoIds.has(id) && !pullingRepoIds.has(id));
   const profileId = envSelect.value || null;
   const installType = document.querySelector('input[name="installType"]:checked').value;
+  if (pulling.length) showBanner(`Skipped while git pull is running: ${pulling.map(repoName).join(', ')}`);
   if (toStart.length === 0) return;
 
-  hideBanner();
+  if (!pulling.length) hideBanner();
+  if (runningRepoIds.size === 0) batchResults.clear();
   stopBtn.classList.remove('hidden');
 
   toStart.forEach((id) => {
     runningRepoIds.add(id);
     setStatus(id, 'running');
-    setTabRunning(id, true);
+    syncTabButtons(id);
   });
+  syncPullBtn();
 
   await window.packagerAPI.runPackage(toStart, profileId, installType, {
     skipTests: skipTestsChk.checked,
@@ -621,24 +651,40 @@ window.packagerAPI.onBuildLog(({ repoId, line, isError }) => {
 });
 window.packagerAPI.onBuildDone(({ repoId, success, error }) => {
   runningRepoIds.delete(repoId);
+  batchResults.set(repoId, success);
   setStatus(repoId, success ? 'success' : 'fail');
-  setTabRunning(repoId, false);
+  syncTabButtons(repoId);
+  syncPullBtn();
   if (error) appendLog(repoId, `[Error] ${error}`, true);
+  if (runningRepoIds.size === 0) showBatchSummary();
 });
 
-// pull 進度借用同一套 log tab 顯示，跟 mvn build 共用分頁但不算進 runningRepoIds
-// （pull 不是「打包中」，不用擋 run/stop 按鈕，只是借地方讓使用者看到進度）
+function repoName(id) {
+  return repos.find((r) => r.id === id)?.displayName || id;
+}
+
+// 打包常要好幾分鐘，使用者多半切去做別的事；全部跑完時給總結，視窗不在前景就另外跳系統通知
+function showBatchSummary() {
+  const failed = [...batchResults].filter(([, ok]) => !ok).map(([id]) => repoName(id));
+  const okCount = batchResults.size - failed.length;
+  const msg = failed.length
+    ? `Packaging finished: ${okCount} succeeded, ${failed.length} failed or stopped (${failed.join(', ')})`
+    : `Packaging finished: ${okCount} succeeded`;
+  showBanner(msg, failed.length ? 'error' : 'info');
+  if (!document.hasFocus()) new Notification('Maven Packager', { body: msg });
+}
+
+// pull 進度借用同一套 log tab 顯示；不改狀態燈，燈號只代表打包結果，避免 pull 成功被看成打包成功
 window.packagerAPI.onPullStart(({ repoId }) => {
   ensureTab(repoId, 'git pull --ff-only');
   activateTab(repoId);
-  setStatus(repoId, 'running');
+  syncTabButtons(repoId);
 });
 window.packagerAPI.onPullLog(({ repoId, line }) => {
   ensureTab(repoId);
   appendLog(repoId, line, false);
 });
 window.packagerAPI.onPullDone(({ repoId, success, error }) => {
-  setStatus(repoId, success ? 'success' : 'fail');
   appendLog(repoId, success ? '[git pull done]' : `[git pull failed] ${error || ''}`, !success);
 });
 
