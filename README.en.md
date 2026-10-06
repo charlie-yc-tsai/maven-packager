@@ -3,7 +3,7 @@
 An Electron app for packaging multiple repos with one click. Check repos, pick an environment and
 an install type, then run `mvn clean install` on all of them in parallel. Each repo gets its own
 log tab with live output, and you can stop/restart individually or all at once. Also has built-in
-Git pull that follows the repo/worktree selected in GitHub Desktop, so you don't have to drop into a terminal.
+Git branch switching and pull that follow the repo/worktree selected in GitHub Desktop, so you don't have to drop into a terminal.
 
 > This is the English translation. The original (Traditional Chinese) doc is
 > [README.md](README.md).
@@ -87,7 +87,12 @@ Environment, install type, skip-tests, and extra-args selections are remembered 
 When **exactly one** repo is checked on the left, a "Git branch" bar surfaces below the toolbar
 (hidden for zero or multiple selections):
 
-- It shows the current branch read-only. **Switch branches in GitHub Desktop**; there is no checkout here.
+- The branch field loads the current branch and lists local and remote branches (`origin/` stripped);
+  typing filters via the browser's native autocomplete.
+- Click "Switch" (or press Enter) to `git checkout` it; a remote-only branch gets a local tracking
+  branch. If the branch is checked out in another worktree, you're told to select that worktree in
+  GitHub Desktop instead.
+- Switching is blocked while that repo is packaging or pulling.
 - git / mvn run in the folder currently selected in GitHub Desktop: if that is a worktree of the repo,
   the worktree is used (its path is shown in the bar and the build log); otherwise the path from
   `repos.local.json`. If Desktop's data can't be read, the configured path is used.

@@ -123,9 +123,18 @@
 
       <div id="branchBar" class="branch-bar hidden">
         <span class="branch-bar-label">Git branch · <strong id="branchBarRepoName"></strong></span>
-        <input id="branchInput" class="branch-bar-input" readonly disabled />
+        <input
+          id="branchInput"
+          class="branch-bar-input"
+          list="branchListOptions"
+          placeholder="Search branches…"
+          autocomplete="off"
+          disabled
+        />
+        <datalist id="branchListOptions"></datalist>
+        <button id="switchBranchBtn" class="primary-btn small-btn" title="git checkout the typed branch" disabled>Switch</button>
         <button id="pullBranchBtn" class="icon-btn" title="git pull --ff-only (update current branch to latest)" disabled>⇩</button>
-        <button id="refreshBranchBtn" class="icon-btn" title="Reload current branch (after switching in GitHub Desktop)" disabled>⟳</button>
+        <button id="refreshBranchBtn" class="icon-btn" title="Reload branches" disabled>⟳</button>
       </div>
 
       <div id="banner" class="banner hidden">

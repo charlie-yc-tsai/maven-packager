@@ -7,6 +7,8 @@ const copyJavaPathBtn = document.getElementById('copyJavaPathBtn');
 const branchBarEl = document.getElementById('branchBar');
 const branchBarRepoNameEl = document.getElementById('branchBarRepoName');
 const branchInput = document.getElementById('branchInput');
+const branchListOptions = document.getElementById('branchListOptions');
+const switchBranchBtn = document.getElementById('switchBranchBtn');
 const pullBranchBtn = document.getElementById('pullBranchBtn');
 const refreshBranchBtn = document.getElementById('refreshBranchBtn');
 const selectAllBtn = document.getElementById('selectAllBtn');
@@ -229,13 +231,18 @@ function renderRepoList() {
 // ---------- Git 分支 ----------
 // 這是獨立的 contextual bar：只在左側「剛好勾一個 repo」時浮出來，
 // 跟上面「怎麼打包」的 toolbar 是兩件事，不擠在同一排搶對齊
-// 分支欄位只顯示目前分支（換分支請在 GitHub Desktop 做），只留 pull 跟重新整理
+// branchInput 搭配 <datalist> 用瀏覽器原生的輸入時篩選/搜尋，不用另外寫下拉元件
 let branchFieldRepoId = null;
-let branchFieldReady = false; // 目前分支讀取成功才給 pull
+let branchFieldOptions = [];
+let branchFieldCurrent = null; // 讀取成功時的目前分支；null 代表還沒讀好，不給 pull / switch
 
-function syncPullBtn() {
+// 打包中或 pull 中都不能 pull / 切分支（同一個資料夾）
+function syncBranchButtons() {
   const id = branchFieldRepoId;
-  pullBranchBtn.disabled = !branchFieldReady || runningRepoIds.has(id) || pullingRepoIds.has(id);
+  const blocked = branchFieldCurrent === null || runningRepoIds.has(id) || pullingRepoIds.has(id);
+  pullBranchBtn.disabled = blocked;
+  switchBranchBtn.disabled = blocked;
+  branchInput.disabled = blocked;
 }
 
 function resetBranchField() {
@@ -254,12 +261,12 @@ function updateBranchField() {
 
 async function loadBranchField(repoId) {
   branchFieldRepoId = repoId;
-  branchFieldReady = false;
+  branchFieldCurrent = null;
   refreshBranchBtn.disabled = true;
-  syncPullBtn();
+  syncBranchButtons();
   branchInput.value = '';
   branchInput.placeholder = 'Loading…';
-  const res = await window.packagerAPI.getCurrentBranch(repoId);
+  const res = await window.packagerAPI.listBranches(repoId);
   if (branchFieldRepoId !== repoId) return; // 讀取途中使用者換了勾選，結果作廢
   refreshBranchBtn.disabled = false;
   if (!res.ok) {
@@ -269,18 +276,43 @@ async function loadBranchField(repoId) {
   // GitHub Desktop 目前選的是這個 repo 的 worktree 時，git/mvn 都在那個資料夾跑，標出來避免搞混
   const repo = repos.find((r) => r.id === repoId);
   branchBarRepoNameEl.textContent = (repo ? repo.displayName : repoId) + (res.isWorktree ? ` (worktree: ${res.workPath})` : '');
-  branchInput.value = res.current || '(detached HEAD)';
-  branchFieldReady = true;
-  syncPullBtn();
+  branchFieldOptions = res.branches;
+  branchListOptions.innerHTML = res.branches.map((b) => `<option value="${b}"></option>`).join('');
+  branchFieldCurrent = res.current;
+  branchInput.value = res.current;
+  branchInput.placeholder = res.current ? 'Search branches…' : '(detached HEAD) Search branches…';
+  syncBranchButtons();
 }
 
 refreshBranchBtn.addEventListener('click', () => {
   if (branchFieldRepoId) loadBranchField(branchFieldRepoId);
 });
 
-// 從 GitHub Desktop 切回來（可能換了 repo/worktree/分支）就自動重讀，畫面才不會顯示過期的分支
+// 從 GitHub Desktop 切回來（可能換了 repo/worktree/分支）就自動重讀，畫面才不會顯示過期的分支；
+// 使用者已經打了別的分支名稱還沒按 Switch 的話不重讀，免得打的字被蓋掉
 window.addEventListener('focus', () => {
-  if (branchFieldRepoId && !pullingRepoIds.has(branchFieldRepoId)) loadBranchField(branchFieldRepoId);
+  const id = branchFieldRepoId;
+  if (!id || pullingRepoIds.has(id)) return;
+  if (branchFieldCurrent !== null && branchInput.value.trim() !== branchFieldCurrent) return;
+  loadBranchField(id);
+});
+
+switchBranchBtn.addEventListener('click', async () => {
+  const repoId = branchFieldRepoId;
+  const branch = branchInput.value.trim();
+  if (!repoId || !branch || branch === branchFieldCurrent) return;
+  if (!branchFieldOptions.includes(branch)) {
+    showBanner(`Branch not found: "${branch}"`);
+    return;
+  }
+  switchBranchBtn.disabled = true;
+  const res = await window.packagerAPI.checkoutBranch(repoId, branch);
+  if (!res.ok) showBanner(res.error);
+  else showBanner(`${repoName(repoId)} switched to ${branch}`, 'info');
+  loadBranchField(repoId);
+});
+branchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') switchBranchBtn.click();
 });
 
 // git pull：把目前分支更新到最新
@@ -290,7 +322,7 @@ pullBranchBtn.addEventListener('click', async () => {
   pullingRepoIds.add(repoId);
   syncTabButtons(repoId);
   refreshBranchBtn.disabled = true;
-  syncPullBtn();
+  syncBranchButtons();
   const res = await window.packagerAPI.pullRepo(repoId);
   pullingRepoIds.delete(repoId);
   syncTabButtons(repoId);
@@ -625,7 +657,7 @@ async function startRepos(repoIds) {
     setStatus(id, 'running');
     syncTabButtons(id);
   });
-  syncPullBtn();
+  syncBranchButtons();
 
   await window.packagerAPI.runPackage(toStart, profileId, installType, {
     skipTests: skipTestsChk.checked,
@@ -654,7 +686,7 @@ window.packagerAPI.onBuildDone(({ repoId, success, error }) => {
   batchResults.set(repoId, success);
   setStatus(repoId, success ? 'success' : 'fail');
   syncTabButtons(repoId);
-  syncPullBtn();
+  syncBranchButtons();
   if (error) appendLog(repoId, `[Error] ${error}`, true);
   if (runningRepoIds.size === 0) showBatchSummary();
 });
