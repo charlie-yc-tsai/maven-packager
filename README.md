@@ -2,7 +2,7 @@
 
 跨 repo 一鍵打包工具（Electron app）。勾選 repo、選環境、選安裝方式，一鍵平行執行
 `mvn clean install`，每個 repo 各自一個 log 分頁即時看輸出，可單獨/整批停止、重新開始。
-另外內建 Git pull，並自動跟著 GitHub Desktop 目前選的 repo／worktree，不用切去終端機操作。
+另外內建 Git 分支切換／pull，並自動跟著 GitHub Desktop 目前選的 repo／worktree，不用切去終端機操作。
 
 > 介面文字為英文，本文件括號附上實際按鈕/欄位標籤方便對照。若要看英文版說明文件，見
 > [README.en.md](README.en.md)。
@@ -71,7 +71,10 @@ App 啟動時會自動合併 `repos.json` + `repos.local.json`；缺路徑的 re
 
 左側**剛好勾選一個** repo 時，工具列下方會浮出一條「Git branch」bar（勾 0 個或多個都不會顯示）：
 
-- 唯讀顯示目前分支。**切換分支請在 GitHub Desktop 做**，這裡不提供 checkout。
+- 分支輸入框會載入目前分支，並列出本機＋遠端分支（`origin/` 已去掉字首），輸入文字可用瀏覽器原生自動完成搜尋。
+- 按「Switch」或 Enter 用 `git checkout` 切過去；只有遠端有的分支，git 會自動建立追蹤分支。若該分支已被其他
+  worktree 佔用，會提示改到 GitHub Desktop 選那個 worktree。
+- 該 repo 打包中或 pull 中時，不能切換分支。
 - git／mvn 預設在 GitHub Desktop 目前選的資料夾執行：如果它是該 repo 的 worktree，就用那個 worktree，
   並在 bar 與 build log 標出實際路徑；否則用 `repos.local.json` 設定的路徑。讀不到 Desktop 資料時也退回設定路徑。
 - 在 Desktop 換選之後，按「⟳」重新讀取。

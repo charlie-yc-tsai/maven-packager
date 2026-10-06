@@ -363,16 +363,23 @@ ipcMain.handle('set-repo-path', (event, { repoId, localPath }) => {
 });
 
 // ---------- Git 分支 ----------
-// 切換分支交給 GitHub Desktop，這裡只讀目前分支（跟 pull / mvn 用同一個資料夾）
-ipcMain.handle('get-current-branch', (event, { repoId }) => {
+// 分支清單跟目前分支都從 getWorkPath 的資料夾讀（跟 pull / mvn / checkout 同一個）
+ipcMain.handle('list-branches', (event, { repoId }) => {
   try {
     const repo = loadRepoProfiles().find((r) => r.id === repoId);
     if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
     const cwd = getWorkPath(repo);
-    const current = execFileSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf-8' }).trim();
-    return { ok: true, current, workPath: cwd, isWorktree: cwd !== repo.localPath };
+    const git = (args) => execFileSync('git', args, { cwd, encoding: 'utf-8' }).split('\n').map((l) => l.trim()).filter(Boolean);
+    const local = git(['branch', '--format=%(refname:short)']);
+    // 遠端分支：origin/xxx 去掉字首跟本機分支合併顯示，才選得到「本機還沒 checkout 過」的分支
+    const remote = git(['branch', '-r', '--format=%(refname:short)'])
+      .filter((b) => !b.endsWith('/HEAD'))
+      .map((b) => b.replace(/^origin\//, ''));
+    const branches = [...new Set([...local, ...remote])];
+    const current = git(['branch', '--show-current'])[0] || '';
+    return { ok: true, branches, current, workPath: cwd, isWorktree: cwd !== repo.localPath };
   } catch (err) {
-    return { ok: false, error: `Failed to read branch: ${err.message}` };
+    return { ok: false, error: `Failed to read branches: ${err.message}` };
   }
 });
 
@@ -405,6 +412,25 @@ ipcMain.handle('pull-repo', (event, { repoId }) => {
       resolve(success ? { ok: true } : { ok: false, error: `git pull exit code ${code}` });
     });
   });
+});
+
+ipcMain.handle('checkout-branch', (event, { repoId, branch }) => {
+  if (!branch?.trim()) return { ok: false, error: 'Branch name is required' };
+  if (runningProcesses.has(repoId)) return { ok: false, error: 'This repo is running, stop it before switching branches' };
+  if (pullingRepoIds.has(repoId)) return { ok: false, error: 'git pull is running for this repo, wait for it to finish' };
+  const repo = loadRepoProfiles().find((r) => r.id === repoId);
+  if (!repo?.localPath) return { ok: false, error: 'Local path is not set yet' };
+  try {
+    execFileSync('git', ['checkout', branch.trim()], { cwd: getWorkPath(repo), encoding: 'utf-8', stdio: 'pipe' });
+    return { ok: true };
+  } catch (err) {
+    // 同一個 branch 不能同時在兩個 worktree checkout；點出佔用它的資料夾，使用者才知道要去 Desktop 選那個 worktree
+    const used = /already (?:used|checked out) by worktree at '(.+?)'/.exec(err.message);
+    if (used) {
+      return { ok: false, error: `"${branch}" is checked out in another worktree: ${used[1]}. Select that worktree in GitHub Desktop instead.` };
+    }
+    return { ok: false, error: `Failed to switch branch: ${(err.stderr || err.message).toString().trim()}` };
+  }
 });
 
 // ---------- 動態解析 Maven settings.xml 的 profile id ----------

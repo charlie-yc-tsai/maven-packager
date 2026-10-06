@@ -11,7 +11,8 @@ contextBridge.exposeInMainWorld('packagerAPI', {
   autoDetectPaths: () => ipcRenderer.invoke('auto-detect-paths'),
   listEnvironments: () => ipcRenderer.invoke('list-environments'),
   listJavaHomes: () => ipcRenderer.invoke('list-java-homes'),
-  getCurrentBranch: (repoId) => ipcRenderer.invoke('get-current-branch', { repoId }),
+  listBranches: (repoId) => ipcRenderer.invoke('list-branches', { repoId }),
+  checkoutBranch: (repoId, branch) => ipcRenderer.invoke('checkout-branch', { repoId, branch }),
   pullRepo: (repoId) => ipcRenderer.invoke('pull-repo', { repoId }),
   runPackage: (repoIds, profileId, installType, options) =>
     ipcRenderer.invoke('run-package', { repoIds, profileId, installType, ...options }),
