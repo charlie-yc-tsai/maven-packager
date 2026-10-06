@@ -125,8 +125,18 @@ function readLevelDbFiles(dir) {
   return fs
     .readdirSync(dir)
     .filter((f) => /^\d+\.(log|ldb)$/.test(f))
-    .sort((a, b) => parseInt(a) - parseInt(b)) // 編號越大越新，最後找到的值就是最新的
-    .map((f) => fs.readFileSync(path.join(dir, f)).toString('latin1'));
+    // .log 是目前正在寫的檔，永遠比 .ldb 新；.ldb 之間編號越大越新
+    .sort((a, b) => a.endsWith('.log') - b.endsWith('.log') || parseInt(a) - parseInt(b))
+    .map((f) => ({ text: fs.readFileSync(path.join(dir, f)).toString('latin1'), newestFirst: f.endsWith('.ldb') }));
+}
+
+// 由舊到新列出所有 match：.log 依寫入順序附加（越後面越新），
+// .ldb 整理過的檔裡同一個 key 的多個版本是「新的在前」，要反過來
+function matchesOldestFirst(files, re) {
+  return files.flatMap(({ text, newestFirst }) => {
+    const ms = [...text.matchAll(re)];
+    return newestFirst ? ms.reverse() : ms;
+  });
 }
 
 function decodeVarint(bytes) {
@@ -138,21 +148,24 @@ function decodeVarint(bytes) {
 function getDesktopSelectedPath() {
   try {
     let selectedId = null;
-    for (const s of readLevelDbFiles(path.join(DESKTOP_DATA, 'Local Storage', 'leveldb'))) {
-      for (const m of s.matchAll(/last-selected-repository-id[\x00-\x7f]\x01(\d+)/g)) selectedId = Number(m[1]);
-    }
+    const lsFiles = readLevelDbFiles(path.join(DESKTOP_DATA, 'Local Storage', 'leveldb'));
+    for (const m of matchesOldestFirst(lsFiles, /last-selected-repository-id[\x00-\x7f]\x01(\d+)/g)) selectedId = Number(m[1]);
     if (selectedId === null) return null;
 
     // IndexedDB 的 repository 紀錄是 V8 序列化：o"\x04path"<len><path>...."\x02idI<zigzag varint>
+    // Desktop 切換 worktree 時不換 id，而是改同一筆紀錄的 path，所以要取最新版本
     let found = null;
-    for (const s of readLevelDbFiles(path.join(DESKTOP_DATA, 'IndexedDB', 'file__0.indexeddb.leveldb'))) {
-      for (const m of s.matchAll(/o"\x04path"([\x80-\xff]*[\x00-\x7f])/g)) {
-        const len = decodeVarint(m[1]);
-        const start = m.index + m[0].length;
-        const repoPath = s.slice(start, start + len);
-        const idMatch = s.slice(start + len, start + len + 600).match(/"\x02idI([\x80-\xff]*[\x00-\x7f])/);
-        if (idMatch && decodeVarint(idMatch[1]) >> 1 === selectedId) found = repoPath;
-      }
+    const idbFiles = readLevelDbFiles(path.join(DESKTOP_DATA, 'IndexedDB', 'file__0.indexeddb.leveldb'));
+    for (const m of matchesOldestFirst(idbFiles, /o"\x04path"([\x80-\xff]*[\x00-\x7f])/g)) {
+      const s = m.input;
+      // Chromium IndexedDB 每次寫入都會另存一份「寫入前的舊值」當 undo log（protobuf：0a 0d <13 bytes key> 12 <len> <舊值>），
+      // 那是切換前的路徑，不是目前狀態，要跳過；真正的寫入是 01 0d <key> <len> <值>
+      if (/\x0a\x0d[\s\S]{13}\x12[\x80-\xff]*[\x00-\x7f][\s\S]{0,32}$/.test(s.slice(Math.max(0, m.index - 64), m.index))) continue;
+      const len = decodeVarint(m[1]);
+      const start = m.index + m[0].length;
+      const repoPath = s.slice(start, start + len);
+      const idMatch = s.slice(start + len, start + len + 600).match(/"\x02idI([\x80-\xff]*[\x00-\x7f])/);
+      if (idMatch && decodeVarint(idMatch[1]) >> 1 === selectedId) found = repoPath;
     }
     return found;
   } catch {
