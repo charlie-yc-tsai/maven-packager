@@ -59,13 +59,13 @@ App 啟動時會自動合併 `repos.json` + `repos.local.json`；缺路徑的 re
    Bundle（Bundle only，`autoInstallBundle`）。
 4. 需要的話勾「Skip tests」（加 `-DskipTests`）、填「Extra Maven arguments」（如 `-T 1C` 全核心平行編譯，
    逐字接在指令最後）。
-5. 按「▶ Start packaging」，右側依 repo 各開一個 log 分頁，即時顯示 `mvn` 輸出；`[ERROR]` 紅字、
-   `[WARNING]` 黃字。
+5. 按「▶ Start packaging」（或 Ctrl+Enter；勾多個時按鈕會顯示數量），右側依 repo 各開一個 log 分頁，即時顯示 `mvn` 輸出；`[ERROR]` 紅字、
+   `[WARNING]` 黃字。每個 repo 跑完會在 log 最後標出花了多久，全部跑完的總結也會附上總耗時。
 6. 每個分頁自己有 ▶（開始/重新開始，只影響這個 repo）跟 ■（停止這個 repo）；也可以在某些 repo 還在跑時
    額外勾選別的 repo 再按開始，不用等前面跑完。上方「■ Stop all」一次停掉所有正在跑的。
 7. 左側狀態燈號（分頁上也有）：灰＝待執行、黃（閃爍）＝執行中、綠＝成功、紅＝失敗。
 
-環境、安裝方式、跳過測試、額外參數這些選擇會記在瀏覽器 `localStorage`，重開 app 不會消失。
+左側勾選的 repo、環境、安裝方式、跳過測試、額外參數這些選擇會記在瀏覽器 `localStorage`，重開 app 不會消失。
 
 ### Git 分支與 worktree
 
