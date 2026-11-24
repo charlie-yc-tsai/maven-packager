@@ -16,14 +16,15 @@
         </div>
       </div>
 
-      <div class="github-root-field">
+      <details class="github-root-field" id="githubRootDetails">
+        <summary>⚙ Repo folder settings</summary>
         <label for="githubRootInput">GitHub root folder</label>
         <div class="select-row">
           <input type="text" id="githubRootInput" placeholder="e.g. C:\Users\xxx\Documents\GitHub" />
           <button id="saveGithubRootBtn" class="icon-btn" title="Save root folder">✓</button>
         </div>
         <button id="autoDetectBtn" class="link-btn github-auto-detect-btn">Auto-detect repo paths</button>
-      </div>
+      </details>
 
       <div class="sidebar-section-label">
         REPOS
@@ -121,8 +122,8 @@
         </div>
       </div>
 
-      <div id="branchBar" class="branch-bar hidden">
-        <span class="branch-bar-label">Git branch · <strong id="branchBarRepoName"></strong></span>
+      <div id="branchBar" class="branch-bar">
+        <span class="branch-bar-label">Git branch · <strong id="branchBarRepoName">—</strong></span>
         <input
           id="branchInput"
           class="branch-bar-input"
