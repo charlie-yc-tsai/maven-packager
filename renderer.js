@@ -177,8 +177,22 @@ async function loadRepos() {
 }
 
 let showMissingRepos = false;
+let reposRendered = false;
+
+// 勾選的 repo 也記起來：每天打包的多半是同一組，重開 app 不用重勾
+const SELECTED_KEY = 'aemPackagerSelectedRepos';
+function loadSelectedIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(SELECTED_KEY)) || []);
+  } catch {
+    return new Set();
+  }
+}
 
 function renderRepoList() {
+  // 重畫前以畫面上的勾選為準（新增/編輯/刪除後不會掉勾）；第一次畫時畫面是空的，就讀上次存的
+  const hasRows = repoListEl.querySelector('input[type="checkbox"]');
+  const selected = hasRows ? new Set(getSelectedRepoIds()) : loadSelectedIds();
   repoListEl.innerHTML = '';
   const missing = [];
   repos.forEach((repo) => {
@@ -199,7 +213,9 @@ function renderRepoList() {
       <button type="button" class="link-btn repo-edit-btn" title="Edit this repo">✎</button>
       <button type="button" class="link-btn repo-delete-btn" title="Delete this repo">🗑</button>
     `;
-    row.querySelector('input[type="checkbox"]').addEventListener('change', updateRunButtonState);
+    const box = row.querySelector('input[type="checkbox"]');
+    box.checked = selected.has(repo.id);
+    box.addEventListener('change', updateRunButtonState);
     row.querySelector('.repo-edit-btn').addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -225,7 +241,8 @@ function renderRepoList() {
     });
     repoListEl.appendChild(hint);
   }
-  updateBranchField();
+  reposRendered = true;
+  updateRunButtonState();
 }
 
 // ---------- Git 分支 ----------
@@ -312,7 +329,7 @@ switchBranchBtn.addEventListener('click', async () => {
   loadBranchField(repoId);
 });
 branchInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') switchBranchBtn.click();
+  if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) switchBranchBtn.click(); // Ctrl+Enter 留給開始打包
 });
 
 // git pull：把目前分支更新到最新
@@ -515,10 +532,21 @@ copyJavaPathBtn.addEventListener('click', async () => {
 });
 
 function updateRunButtonState() {
-  const hasRepo = getSelectedRepoIds().length > 0;
-  runBtn.disabled = !(hasRepo && !envSelect.disabled);
+  const ids = getSelectedRepoIds();
+  // repo 清單還沒畫出來前（例如環境先讀完）不要存，免得把上次的勾選蓋成空的
+  if (reposRendered) localStorage.setItem(SELECTED_KEY, JSON.stringify(ids));
+  runBtn.disabled = !(ids.length > 0 && !envSelect.disabled);
+  runBtn.textContent = ids.length > 1 ? `▶ Start packaging (${ids.length})` : '▶ Start packaging';
   updateBranchField();
 }
+
+// Ctrl+Enter 直接開始打包，不用滑鼠去找按鈕
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !runBtn.disabled) {
+    e.preventDefault();
+    runBtn.click();
+  }
+});
 envSelect.addEventListener('change', updateRunButtonState);
 
 // ---------- 狀態燈號 ----------
@@ -653,6 +681,7 @@ async function startRepos(repoIds) {
   stopBtn.classList.remove('hidden');
 
   toStart.forEach((id) => {
+    buildStartTimes.delete(id); // 設定錯誤這類沒送 build-start 就失敗的，不要沿用上一次的開始時間
     runningRepoIds.add(id);
     setStatus(id, 'running');
     syncTabButtons(id);
@@ -674,7 +703,15 @@ stopBtn.addEventListener('click', () => {
   runningRepoIds.forEach((id) => window.packagerAPI.cancelPackage(id));
 });
 
+// 記每個 repo 開始時間，跑完在 log 跟總結顯示花多久
+const buildStartTimes = new Map();
+function formatDuration(ms) {
+  const s = Math.round(ms / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
 window.packagerAPI.onBuildStart(({ repoId, command }) => {
+  buildStartTimes.set(repoId, Date.now());
   ensureTab(repoId, command);
 });
 window.packagerAPI.onBuildLog(({ repoId, line, isError }) => {
@@ -688,6 +725,8 @@ window.packagerAPI.onBuildDone(({ repoId, success, error }) => {
   syncTabButtons(repoId);
   syncBranchButtons();
   if (error) appendLog(repoId, `[Error] ${error}`, true);
+  const started = buildStartTimes.get(repoId);
+  if (started) appendLog(repoId, `[${success ? 'Done' : 'Failed'} in ${formatDuration(Date.now() - started)}]`, !success);
   if (runningRepoIds.size === 0) showBatchSummary();
 });
 
@@ -699,9 +738,11 @@ function repoName(id) {
 function showBatchSummary() {
   const failed = [...batchResults].filter(([, ok]) => !ok).map(([id]) => repoName(id));
   const okCount = batchResults.size - failed.length;
+  const starts = [...batchResults.keys()].map((id) => buildStartTimes.get(id)).filter(Boolean);
+  const took = starts.length ? ` in ${formatDuration(Date.now() - Math.min(...starts))}` : '';
   const msg = failed.length
-    ? `Packaging finished: ${okCount} succeeded, ${failed.length} failed or stopped (${failed.join(', ')})`
-    : `Packaging finished: ${okCount} succeeded`;
+    ? `Packaging finished${took}: ${okCount} succeeded, ${failed.length} failed or stopped (${failed.join(', ')})`
+    : `Packaging finished${took}: ${okCount} succeeded`;
   showBanner(msg, failed.length ? 'error' : 'info');
   if (!document.hasFocus()) new Notification('Maven Packager', { body: msg });
 }

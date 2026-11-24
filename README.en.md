@@ -71,15 +71,16 @@ profiles exist and which module defines them — most projects need Bundle insta
    `autoInstallSinglePackage`) or bundle only ("Bundle only", `autoInstallBundle`).
 4. Optionally check "Skip tests" (adds `-DskipTests`) and/or fill in "Extra Maven arguments"
    (e.g. `-T 1C` for full-core parallel builds — appended verbatim to the command).
-5. Click "▶ Start packaging". A log tab opens per repo with live `mvn` output; `[ERROR]` lines are
-   red, `[WARNING]` lines are yellow.
+5. Click "▶ Start packaging" (or press Ctrl+Enter; it shows the count when several repos are checked). A log tab opens per repo with live `mvn` output; `[ERROR]` lines are
+   red, `[WARNING]` lines are yellow. Each repo's log ends with how long it took, and the final
+   summary includes the total time.
 6. Each tab has its own ▶ (start/restart, scoped to that repo) and ■ (stop that repo). You can
    check and start additional repos while others are still running — no need to wait. "■ Stop
    all" at the top stops everything currently running.
 7. Status dots (on the sidebar row and the tab) — gray: queued, yellow (pulsing): running,
    green: success, red: failed.
 
-Environment, install type, skip-tests, and extra-args selections are remembered in the browser's
+Checked repos, environment, install type, skip-tests, and extra-args selections are remembered in the browser's
 `localStorage`, so they persist across app restarts.
 
 ### Git branch and worktrees
