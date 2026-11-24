@@ -176,14 +176,21 @@ function getDesktopSelectedPath() {
 const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
 
 // Desktop 選中的是這個 repo 的 worktree 就在那裡跑 git/mvn，否則用設定的 localPath
+// localPath 可能是 git 根目錄底下的子資料夾（例如 education\edu，Maven 專案在 edu），
+// 要先往上找到真正有 .git 的根目錄才能比對 worktree，換到 worktree 後也要接回同一個子資料夾
 function getWorkPath(repo) {
   if (!repo.localPath) return null;
   const selected = getDesktopSelectedPath();
-  if (!selected || samePath(selected, repo.localPath)) return repo.localPath;
+  if (!selected) return repo.localPath;
+  let root = path.resolve(repo.localPath);
+  while (!fs.existsSync(path.join(root, '.git')) && path.dirname(root) !== root) root = path.dirname(root);
+  if (samePath(selected, root)) return repo.localPath;
   try {
     const gitFile = fs.readFileSync(path.join(selected, '.git'), 'utf-8'); // worktree 的 .git 是檔案
     const gitDir = gitFile.match(/^gitdir:\s*(.+)$/m)?.[1].trim();
-    if (gitDir && samePath(path.dirname(gitDir), path.join(repo.localPath, '.git', 'worktrees'))) return selected;
+    if (gitDir && samePath(path.dirname(gitDir), path.join(root, '.git', 'worktrees'))) {
+      return path.join(selected, path.relative(root, repo.localPath));
+    }
   } catch {
     // 不是 worktree（或資料夾不存在）
   }
