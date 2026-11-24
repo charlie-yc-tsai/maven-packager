@@ -748,6 +748,8 @@ setInterval(() => {
 window.packagerAPI.onBuildStart(({ repoId, command }) => {
   buildStartTimes.set(repoId, Date.now());
   ensureTab(repoId, command);
+  // 切到正在 build 的 tab；批次同時跑多個時，目前分頁已在跑就不搶焦點
+  if (!activeTabId || !runningRepoIds.has(activeTabId) || activeTabId === repoId) activateTab(repoId);
   setElapsed(repoId, 0);
 });
 window.packagerAPI.onBuildLog(({ repoId, line, isError }) => {
