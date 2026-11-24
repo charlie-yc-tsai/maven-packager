@@ -124,12 +124,13 @@ makeSortable(tabBarEl, 'x');
 
 // info 訊息（成功、完成通知）幾秒後自動收掉；錯誤訊息留著等使用者處理完自己關或做下一步操作
 let bannerTimer = null;
-function showBanner(message, type = 'error') {
+// sticky：連 info 也不自動收（打包總結是整個流程最重要的結果，使用者切去做別的事回來還要看得到）
+function showBanner(message, type = 'error', sticky = false) {
   clearTimeout(bannerTimer);
   bannerMsgEl.textContent = message;
   bannerEl.classList.toggle('info', type === 'info');
   bannerEl.classList.remove('hidden');
-  if (type === 'info') bannerTimer = setTimeout(hideBanner, 4000);
+  if (type === 'info' && !sticky) bannerTimer = setTimeout(hideBanner, 4000);
 }
 function hideBanner() {
   clearTimeout(bannerTimer);
@@ -141,6 +142,7 @@ bannerCloseBtn.addEventListener('click', hideBanner);
 async function loadGithubRoot() {
   const res = await window.packagerAPI.getSettings();
   if (res.ok && res.settings.githubRoot) githubRootInput.value = res.settings.githubRoot;
+  else document.getElementById('githubRootDetails').open = true; // 還沒設過就展開，使用者才找得到
 }
 
 saveGithubRootBtn.addEventListener('click', async () => {
@@ -207,6 +209,7 @@ function renderRepoList() {
     row.draggable = true;
     row.dataset.repoId = repo.id;
     row.innerHTML = `
+      <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
       <input type="checkbox" data-repo-id="${repo.id}" />
       <span class="status-dot" id="dot-${repo.id}"></span>
       <span class="repo-item-name">${repo.displayName}</span>
@@ -262,9 +265,16 @@ function syncBranchButtons() {
   branchInput.disabled = blocked;
 }
 
+// 沒勾或勾多個時不隱藏，改成灰掉的提示：隱藏會讓下方的 log 區在勾第一個 / 第二個 repo 時整塊上下跳
 function resetBranchField() {
   branchFieldRepoId = null;
-  branchBarEl.classList.add('hidden');
+  branchFieldCurrent = null;
+  branchBarRepoNameEl.textContent = '—';
+  branchInput.value = '';
+  branchInput.placeholder = 'Check exactly one repo to use';
+  branchListOptions.innerHTML = '';
+  refreshBranchBtn.disabled = true;
+  syncBranchButtons();
 }
 
 function updateBranchField() {
@@ -579,6 +589,7 @@ function ensureTab(repoId, command) {
   tab.innerHTML = `
     <span class="status-dot" id="tab-dot-${repoId}"></span>
     <span class="tab-label">${repo ? repo.displayName : repoId}</span>
+    <span class="tab-elapsed"></span>
     <button type="button" class="tab-action tab-start" title="Start / restart">▶</button>
     <button type="button" class="tab-action tab-stop" title="Stop this repo">■</button>
     <button type="button" class="tab-action tab-close" title="Close this tab">✕</button>
@@ -606,7 +617,15 @@ function ensureTab(repoId, command) {
   panel.innerHTML = `
     <div class="log-panel-cmd">${command || ''}</div>
     <div class="log-panel-body" id="body-${repoId}"></div>
+    <button type="button" class="log-jump hidden">↓ Jump to latest</button>
   `;
+  // 往上捲看前面的 log 時，自動捲動會停住；給個按鈕一鍵回到最新輸出
+  const logBody = panel.querySelector('.log-panel-body');
+  const jumpBtn = panel.querySelector('.log-jump');
+  logBody.addEventListener('scroll', () => jumpBtn.classList.toggle('hidden', isNearBottom(logBody)));
+  jumpBtn.addEventListener('click', () => {
+    logBody.scrollTop = logBody.scrollHeight;
+  });
   logPanelsEl.appendChild(panel);
 
   syncTabButtons(repoId);
@@ -645,6 +664,9 @@ function activateTab(repoId) {
   document.getElementById(`panel-${repoId}`)?.classList.add('active');
 }
 
+const MAX_LOG_LINES = 5000; // 長時間打包輸出很多，不設上限 DOM 會越來越卡
+const isNearBottom = (el) => el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+
 function appendLog(repoId, line, isError) {
   const body = document.getElementById(`body-${repoId}`);
   if (!body) return;
@@ -657,8 +679,9 @@ function appendLog(repoId, line, isError) {
   div.className = 'log-line' + (level ? ` ${level}` : '');
   div.textContent = line;
   // 使用者往上捲在看前面的 log 時不要硬拉回底部，原本就在底部才跟著捲
-  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+  const atBottom = isNearBottom(body);
   body.appendChild(div);
+  while (body.childElementCount > MAX_LOG_LINES) body.firstElementChild.remove();
   if (atBottom) body.scrollTop = body.scrollHeight;
 }
 
@@ -710,9 +733,22 @@ function formatDuration(ms) {
   return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
 }
 
+// 分頁上顯示執行中的經過時間，打包要好幾分鐘時才看得出有沒有在動
+const setElapsed = (repoId, ms) => {
+  const el = document.querySelector(`#tab-${repoId} .tab-elapsed`);
+  if (el) el.textContent = ms == null ? '' : formatDuration(ms);
+};
+setInterval(() => {
+  runningRepoIds.forEach((id) => {
+    const t = buildStartTimes.get(id);
+    if (t) setElapsed(id, Date.now() - t);
+  });
+}, 1000);
+
 window.packagerAPI.onBuildStart(({ repoId, command }) => {
   buildStartTimes.set(repoId, Date.now());
   ensureTab(repoId, command);
+  setElapsed(repoId, 0);
 });
 window.packagerAPI.onBuildLog(({ repoId, line, isError }) => {
   ensureTab(repoId);
@@ -726,7 +762,12 @@ window.packagerAPI.onBuildDone(({ repoId, success, error }) => {
   syncBranchButtons();
   if (error) appendLog(repoId, `[Error] ${error}`, true);
   const started = buildStartTimes.get(repoId);
-  if (started) appendLog(repoId, `[${success ? 'Done' : 'Failed'} in ${formatDuration(Date.now() - started)}]`, !success);
+  if (started) {
+    appendLog(repoId, `[${success ? 'Done' : 'Failed'} in ${formatDuration(Date.now() - started)}]`, !success);
+    setElapsed(repoId, Date.now() - started); // 停在最終耗時，不再跳動
+  } else {
+    setElapsed(repoId, null);
+  }
   if (runningRepoIds.size === 0) showBatchSummary();
 });
 
@@ -743,7 +784,7 @@ function showBatchSummary() {
   const msg = failed.length
     ? `Packaging finished${took}: ${okCount} succeeded, ${failed.length} failed or stopped (${failed.join(', ')})`
     : `Packaging finished${took}: ${okCount} succeeded`;
-  showBanner(msg, failed.length ? 'error' : 'info');
+  showBanner(msg, failed.length ? 'error' : 'info', true);
   if (!document.hasFocus()) new Notification('Maven Packager', { body: msg });
 }
 

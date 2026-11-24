@@ -97,6 +97,14 @@ html, body {
   flex: 1;
   min-width: 0;
 }
+.github-root-field summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+  user-select: none;
+}
+.github-root-field summary:hover { color: var(--text); }
+.github-root-field[open] summary { margin-bottom: 8px; }
 .github-auto-detect-btn {
   display: block;
   margin-top: 8px;
@@ -182,6 +190,17 @@ html, body {
 .repo-list label.repo-item:focus-within .repo-delete-btn {
   opacity: 1;
 }
+/* 拖拉把手：平常淡淡的，滑過整列才明顯，游標變成抓取 */
+.drag-handle {
+  color: var(--text-muted);
+  opacity: 0.25;
+  cursor: grab;
+  font-size: 11px;
+  letter-spacing: -2px;
+  flex-shrink: 0;
+  transition: opacity 0.12s ease;
+}
+.repo-item:hover .drag-handle { opacity: 0.9; }
 .repo-delete-btn { color: var(--text-muted); }
 .repo-delete-btn:hover { color: var(--status-fail); }
 
@@ -586,7 +605,31 @@ select:disabled { color: var(--text-muted); }
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  position: relative;
 }
+
+.log-jump {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+.log-jump:hover { background: #ff5a34; }
+
+.tab-elapsed {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+.tab-elapsed:empty { display: none; }
 .log-panel.active { display: flex; }
 
 .log-panels:empty::before {
